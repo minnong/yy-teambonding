@@ -21,7 +21,9 @@ import {
 import {
   EMOTE_EMOJI, PAUSED_TEXT, PENDING_MS, PendingGuard, WRONG_TEXT, canIcebreak, cardView, celebrateView,
   closedToast, quizKey, quizResultText, quizStillOpen, quizToShow, sheetTarget, tableButton, teamOf,
+  youreUpMissed,
 } from './uiState';
+import { moveHeldText } from '../room/moveThrottle';
 
 const EMOTE_LABEL: Record<string, string> = { wave: 'Wave', highfive: 'High-five', laugh: 'Laugh', heart: 'Heart' };
 /** Client-side spam guard for emote taps (message budget). */
@@ -234,8 +236,27 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
 
   // ---------- wiring ----------
 
+  /** A live youreUp already opened the overlay; the snapshot right behind it only records it as seen. */
+  let liveUpFor: string | null = null;
+  const openYoureUp = (teamId: string) => {
+    riddle?.close();
+    quiz?.close();
+    const t = snap.teams[teamId];
+    announceOpen("You're up!", t ? upBanner(t.name) : '', t?.color);
+  };
+  /** M7: my team was called while this phone slept (or before it joined): show "You're up!" now. */
+  const catchUpYoureUp = (s: PublicSnapshot) => {
+    const key = youreUpMissed(s, myId, store.youreUpSeen);
+    if (!key) return;
+    store.youreUpSeen.add(key);
+    const mine = teamOf(s, myId);
+    if (mine && liveUpFor !== mine) openYoureUp(mine);
+    liveUpFor = null;
+  };
+
   const applySnap = (s: PublicSnapshot) => {
     snap = s;
+    catchUpYoureUp(s);
     if (!s.paused && banners.sticky === PAUSED_TEXT) banners.setSticky(null);
     if (s.paused && !banners.sticky) banners.setSticky(PAUSED_TEXT);
     renderTable();
@@ -254,6 +275,7 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
     renderSheet();
     renderTable();
   }));
+  unsubs.push(room.onMoveHeld((ms) => { const t = moveHeldText(ms); if (t) banners.toast(t); }));
   unsubs.push(room.onTapAvatar((id) => {
     if (!near.includes(id)) { banners.toast(`Walk closer to ${nameOf(id)}`); return; }
     pinned = id;
@@ -329,10 +351,8 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
   on('youreUp', (m) => {
     if (m.teamId !== teamOf(snap, myId)) return;
     room.effects.flashTable(snap.teamOrder.indexOf(m.teamId));
-    riddle?.close();
-    quiz?.close();
-    const t = snap.teams[m.teamId];
-    announceOpen("You're up!", t ? upBanner(t.name) : '', t?.color);
+    liveUpFor = m.teamId;
+    openYoureUp(m.teamId);
   });
   on('celebrate', (m) => {
     const v = celebrateView(snap, myId, m.teamId);

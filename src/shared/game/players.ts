@@ -11,6 +11,8 @@ import { closeIcebreakers, hasTeam, isPlayingTeam, livePlayer, spawnPoint } from
 const UNKNOWN_PLAYER = 'unknown player';
 const UNKNOWN_TEAM = 'unknown team';
 const MAX_NAME = 24;
+/** addSelf refusal the name picker reacts to (it re-shows the roster, T9). */
+export const NAME_TAKEN = 'That name is already on the list';
 
 const connect: Handler<'connect'> = (state, a, ctx) => {
   if (!livePlayer(state, a.playerId)) return err(UNKNOWN_PLAYER);
@@ -40,7 +42,7 @@ const addSelf: Handler<'addSelf'> = (state, a) => {
   const lower = name.toLowerCase();
   const taken = Object.values(state.players)
     .some((p) => p.teamId === a.teamId && !p.removed && p.name.trim().toLowerCase() === lower);
-  if (taken) return err('That name is already on the list');
+  if (taken) return err(NAME_TAKEN);
   const slug = slugify(name);
   let n = 1;
   while (Object.hasOwn(state.players, `x-${slug}-${n}`)) n++;

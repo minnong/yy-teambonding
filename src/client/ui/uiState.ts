@@ -138,6 +138,66 @@ export function bannerPlan(text: string): BannerPlan {
   return { kind: 'timed', text, ms: BANNER_MS };
 }
 
+/** A timed banner with another waiting behind it still shows at least this long. */
+export const BANNER_MIN_MS = 3000;
+const MAX_WAITING_BANNERS = 3;
+
+/**
+ * Timed banners, one at a time (M2). callNext sends "🎉 Team X, you're up!" and the FINAL BOSS
+ * banner back to back; replacing one with the next meant the room never saw the first. A banner
+ * with others waiting is cut to BANNER_MIN_MS (never shorter); the last one keeps its full time.
+ */
+export class BannerQueue {
+  private cur: { text: string; from: number; until: number } | null = null;
+  private waiting: { text: string; ms: number }[] = [];
+
+  push(text: string, ms: number, now: number): void {
+    this.advance(now);
+    if (this.cur?.text === text || this.waiting.some((w) => w.text === text)) return;
+    if (!this.cur) { this.cur = { text, from: now, until: now + ms }; return; }
+    this.waiting.push({ text, ms });
+    if (this.waiting.length > MAX_WAITING_BANNERS) this.waiting.shift();
+    this.cur.until = Math.min(this.cur.until, Math.max(this.cur.from + BANNER_MIN_MS, now));
+    this.advance(now);
+  }
+
+  clear(): void { this.cur = null; this.waiting = []; }
+
+  /** The banner to show at `now`, or null. */
+  current(now: number): string | null {
+    this.advance(now);
+    return this.cur?.text ?? null;
+  }
+
+  /** When current() next changes, or null when nothing is showing. */
+  nextChangeAt(): number | null { return this.cur?.until ?? null; }
+
+  private advance(now: number): void {
+    while (this.cur && now >= this.cur.until) {
+      const n = this.waiting.shift();
+      if (!n) { this.cur = null; return; }
+      const from = this.cur.until;
+      this.cur = { text: n.text, from, until: from + (this.waiting.length > 0 ? Math.min(n.ms, BANNER_MIN_MS) : n.ms) };
+    }
+  }
+}
+
+/** Identifies one call of a team, for "have I shown its You're up! overlay". */
+export const youreUpKey = (teamId: TeamId, departedOrder: number): string => `${teamId}:${departedOrder}`;
+
+/**
+ * M7: the key of my team's call when the snapshot says we have been called but this tab never
+ * showed "You're up!" for it (the phone was asleep at the call); null otherwise.
+ */
+export function youreUpMissed(s: PublicSnapshot, me: PlayerId, seen: { has(key: string): boolean }): string | null {
+  if (s.phase !== 'competition') return null;
+  const id = teamOf(s, me);
+  const t = id && Object.hasOwn(s.teams, id) ? s.teams[id]! : undefined;
+  if (!t || t.status !== 'departed' || t.departedOrder === null) return null;
+  const key = youreUpKey(t.id, t.departedOrder);
+  return seen.has(key) ? null : key;
+}
+
 export function celebrateView(s: PublicSnapshot, me: PlayerId, teamId: TeamId): { mine: true } | { mine: false; text: string } {
   if (teamOf(s, me) === teamId) return { mine: true };
   return { mine: false, text: `${s.teams[teamId]?.name ?? 'A team'} escaped the lobby! 🎉` };

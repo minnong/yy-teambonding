@@ -18,9 +18,9 @@ interface KV { getItem(k: string): string | null; setItem(k: string, v: string):
 export class AnsweredQuizzes {
   private readonly keys = new Set<string>();
 
-  constructor(private readonly storage: () => KV = () => sessionStorage) {
+  constructor(private readonly storage: () => KV = () => sessionStorage, private readonly key = ANSWERED_KEY) {
     try {
-      const v: unknown = JSON.parse(this.storage().getItem(ANSWERED_KEY) ?? '[]');
+      const v: unknown = JSON.parse(this.storage().getItem(this.key) ?? '[]');
       if (Array.isArray(v)) for (const k of v) if (typeof k === 'string') this.keys.add(k);
     } catch { /* missing, corrupt or unavailable: start empty */ }
   }
@@ -29,7 +29,7 @@ export class AnsweredQuizzes {
 
   add(key: string): void {
     this.keys.add(key);
-    try { this.storage().setItem(ANSWERED_KEY, JSON.stringify([...this.keys].slice(-MAX_ANSWERED))); } catch { /* memory only */ }
+    try { this.storage().setItem(this.key, JSON.stringify([...this.keys].slice(-MAX_ANSWERED))); } catch { /* memory only */ }
   }
 }
 
@@ -42,6 +42,8 @@ export class UiStore {
   quiz: QuizInfo | null = null;
   /** Quizzes I answered (by quizKey), kept across reloads in this tab. */
   readonly answered = new AnsweredQuizzes();
+  /** Calls of my team whose "You're up!" this tab has shown (youreUpKey), kept across reloads (M7). */
+  readonly youreUpSeen = new AnsweredQuizzes(() => sessionStorage, 'lobby.youreUpSeen');
 
   constructor(net: Net) {
     net.on('welcome', (m) => { this.me = m.you; this.setSnap(m.snapshot); });

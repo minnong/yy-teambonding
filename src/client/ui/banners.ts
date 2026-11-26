@@ -1,12 +1,13 @@
 // Top-of-screen messages: one full-width banner (timed, or sticky for "Paused") and a short stack
 // of toasts under it. The whole stack ignores pointers so walking taps pass straight through.
+// Timed banners queue (BannerQueue, M2): a new one waits until the current has had its moment.
 import { add, el } from './dom';
-import { TOAST_MS, bannerPlan } from './uiState';
+import { BannerQueue, TOAST_MS, bannerPlan } from './uiState';
 
 export interface Banners {
   /** Applies a server `banner` text: "" clears, "Paused" sticks, anything else shows for 6 s. */
   banner(text: string): void;
-  /** Shows text for 6 s, then falls back to the sticky banner (if any). */
+  /** Shows text for 6 s (after any timed banner already showing), then falls back to the sticky banner. */
   timed(text: string, ms?: number): void;
   setSticky(text: string | null): void;
   readonly sticky: string | null;
@@ -25,18 +26,27 @@ export function createBanners(hud: HTMLElement): Banners {
   add(hud, bar, toasts);
 
   let sticky: string | null = null;
-  let timedText: string | null = null;
+  const queue = new BannerQueue();
   let timer: ReturnType<typeof setTimeout> | null = null;
   const toastTimers = new Set<ReturnType<typeof setTimeout>>();
 
   const render = () => {
+    const timedText = queue.current(Date.now());
     const text = timedText ?? sticky;
     bar.hidden = !text;
     bar.textContent = text ?? '';
     bar.classList.toggle('lb-banner-sticky', !timedText && !!sticky);
     toasts.style.top = text ? `${bar.offsetTop + bar.offsetHeight + 8}px` : '';
   };
-  const clearTimed = () => { if (timer) clearTimeout(timer); timer = null; timedText = null; };
+  const clearTimer = () => { if (timer) clearTimeout(timer); timer = null; };
+  const clearTimed = () => { clearTimer(); queue.clear(); };
+  /** Re-renders whenever the queue moves on. */
+  const schedule = () => {
+    clearTimer();
+    const at = queue.nextChangeAt();
+    if (at === null) return;
+    timer = setTimeout(() => { timer = null; render(); schedule(); }, Math.max(0, at - Date.now()));
+  };
 
   const api: Banners = {
     banner(text) {
@@ -47,10 +57,9 @@ export function createBanners(hud: HTMLElement): Banners {
       render();
     },
     timed(text, ms = 6000) {
-      clearTimed();
-      timedText = text;
-      timer = setTimeout(() => { timer = null; timedText = null; render(); }, ms);
+      queue.push(text, ms, Date.now());
       render();
+      schedule();
     },
     setSticky(text) { if (sticky === text) return; sticky = text; render(); },
     get sticky() { return sticky; },

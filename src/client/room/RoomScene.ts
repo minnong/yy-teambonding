@@ -14,7 +14,8 @@ import { TableView } from './tables';
 import { BoardView } from './leaderboard';
 import { ZOOM_TWEEN_MS, chooseView, clampCenter, easeInOut, lerp } from './camera';
 import { attachKeyboard, attachTaps } from './input';
-import { MoveThrottle } from './moveThrottle';
+import { MOVE_HELD_NOTICE_MS, MoveThrottle } from './moveThrottle';
+import { SPARKLE_DRAW_DY, snapTapToSparkle } from './sparkleTap';
 import { SceneEffects, type RoomEffects } from './effects';
 
 export interface RoomApi {
@@ -27,6 +28,8 @@ export interface RoomApi {
    */
   onNearChange(fn: (others: PlayerId[], nearOwnTable: boolean) => void): () => void;
   setZoomedOut(b: boolean): void;
+  /** A tapped move is held (throttle or act cap) longer than MOVE_HELD_NOTICE_MS: once per held move. */
+  onMoveHeld(fn: (waitMs: number) => void): () => void;
   /** Transient scene effects for server events (float, emote bubble, table flash). */
   effects: RoomEffects;
   destroy(): void;
@@ -48,6 +51,9 @@ export class RoomScene extends Phaser.Scene {
   /** R27: at most 1 move/s and 20 per rolling minute; extra taps fold into one trailing move. */
   private readonly moves = new MoveThrottle();
   private moveTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The queued move has already been announced as held (T12). */
+  private heldNoticed = false;
+  readonly heldFns = new Set<(waitMs: number) => void>();
   private vignette!: Phaser.GameObjects.Image;
   private detach: (() => void)[] = [];
   private lastWall = 0;
@@ -212,7 +218,7 @@ export class RoomScene extends Phaser.Scene {
     }
     for (const c of s.collectibles) {
       if (this.sparkles.has(c.id)) continue;
-      const img = this.add.image(c.pos.x, c.pos.y - 12, ART.sparkle).setDepth(c.pos.y);
+      const img = this.add.image(c.pos.x, c.pos.y + SPARKLE_DRAW_DY, ART.sparkle).setDepth(c.pos.y);
       this.tweens.add({ targets: img, scale: { from: 0.7, to: 1.15 }, alpha: { from: 0.65, to: 1 }, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       this.tweens.add({ targets: img, y: img.y - 4, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       this.sparkles.set(c.id, img);
@@ -233,15 +239,25 @@ export class RoomScene extends Phaser.Scene {
       for (const fn of this.tapFns) fn(best.id);
       return;
     }
-    const to = { x: Math.round(Phaser.Math.Clamp(w.x, 0, WORLD_W)), y: Math.round(Phaser.Math.Clamp(w.y, 0, WORLD_H)) };
+    // A tap on a sparkle's sprite walks onto the sparkle itself, not the tile above it (M1).
+    const to = snapTapToSparkle(w, this.snap.collectibles, this.view.zoom)
+      ?? { x: Math.round(Phaser.Math.Clamp(w.x, 0, WORLD_W)), y: Math.round(Phaser.Math.Clamp(w.y, 0, WORLD_H)) };
     // The marker shows at once; the move itself may be coalesced into a trailing send (R27).
     const now = Date.now();
     const go = this.moves.request(to, now, this.net.budget.allowedAt('move', now));
     if (go) this.net.act({ type: 'move', to: go });
-    else this.scheduleQueuedMove();
+    else { this.scheduleQueuedMove(); this.noticeHeld(now); }
     this.tweens.killTweensOf(this.marker);
     this.marker.setPosition(to.x, to.y).setVisible(true).setAlpha(1).setScale(0.6);
     this.tweens.add({ targets: this.marker, scale: 1.3, alpha: 0, duration: 650, ease: 'Quad.easeOut', onComplete: () => this.marker.setVisible(false) });
+  }
+
+  /** T12: the marker shows but the avatar may sit still for a while: say so, once per held move. */
+  private noticeHeld(now: number): void {
+    const at = this.moves.nextAt(this.net.budget.allowedAt('move', now));
+    if (at === null || this.heldNoticed || at - now <= MOVE_HELD_NOTICE_MS) return;
+    this.heldNoticed = true;
+    for (const fn of this.heldFns) fn(at - now);
   }
 
   private scheduleQueuedMove(): void {
@@ -252,7 +268,7 @@ export class RoomScene extends Phaser.Scene {
       const now = Date.now();
       // Checked and taken in the same turn: the shared budget (R28) cannot change in between.
       const go = this.moves.flush(now, this.net.budget.allowedAt('move', now));
-      if (go) this.net.act({ type: 'move', to: go });
+      if (go) { this.heldNoticed = false; this.net.act({ type: 'move', to: go }); }
       else this.scheduleQueuedMove(); // woke a hair early
     }, Math.max(0, at - Date.now()));
   }
@@ -260,6 +276,7 @@ export class RoomScene extends Phaser.Scene {
   /** Drops a queued trailing move (a keyboard walk takes over, or the scene is going away). */
   cancelQueuedMove(): void {
     this.moves.clear();
+    this.heldNoticed = false;
     if (this.moveTimer !== null) { clearTimeout(this.moveTimer); this.moveTimer = null; }
   }
 
@@ -414,6 +431,7 @@ export function startRoom(
       return () => { scene.nearFns.delete(fn); };
     },
     setZoomedOut(b) { scene.setZoomedOut(b); },
+    onMoveHeld(fn) { scene.heldFns.add(fn); return () => { scene.heldFns.delete(fn); }; },
     effects: scene.effects,
     destroy() {
       for (const u of unsubs) u();
@@ -422,6 +440,7 @@ export function startRoom(
       window.visualViewport?.removeEventListener('resize', resize);
       scene.tapFns.clear();
       scene.nearFns.clear();
+      scene.heldFns.clear();
       game.destroy(true);
       host.remove();
       hud.remove();

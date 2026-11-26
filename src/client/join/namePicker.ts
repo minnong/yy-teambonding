@@ -1,6 +1,7 @@
 // Name picker: roster from a read-only peek, grouped by team; or add yourself on the day.
 import type { PublicSnapshot } from '@shared/protocol';
 import { MAX_NAME_LEN } from '@shared/protocol';
+import { NAME_TAKEN } from '@shared/game/players';
 import type { Net } from '../net';
 
 export interface PickerHandlers {
@@ -11,6 +12,14 @@ export interface PickerView {
   /** Shows a server error under the add-yourself form. */
   showError(message: string): void;
   destroy(): void;
+}
+
+/** Changes only when the list the picker shows would change: names, teams, removals. */
+export function rosterKey(s: PublicSnapshot): string {
+  return JSON.stringify([
+    s.teamOrder.map((id) => [id, s.teams[id]?.name ?? '']),
+    Object.values(s.players).filter((p) => !p.removed).map((p) => [p.id, p.name, p.teamId]).sort(),
+  ]);
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -33,16 +42,27 @@ export function showNamePicker(root: HTMLElement, net: Net, h: PickerHandlers): 
   wrap.replaceChildren(el('h1', undefined, 'Who are you?'), el('p', 'lb-status', 'Connecting…'));
   let error: HTMLElement | null = null;
   let snap: PublicSnapshot | null = null;
-  let rendered = false;
+  /** What is on screen: nothing yet, the list (with the roster it was drawn from), or the add form. */
+  let view: 'none' | 'list' | 'add' = 'none';
+  let shownKey = '';
 
-  // Render once: a later snapshot (peek replay after a reconnect) must not wipe the add-yourself form.
-  const off = net.on('snapshot', (m) => { snap = m.snapshot; if (!rendered) { rendered = true; renderList(); } });
+  // A later snapshot (peek replay after a reconnect) redraws the list only if the roster changed,
+  // and never wipes the add-yourself form being typed into.
+  const off = net.on('snapshot', (m) => {
+    snap = m.snapshot;
+    if (view === 'none' || (view === 'list' && rosterKey(snap) !== shownKey)) renderList();
+  });
   const offState = net.on('state', (s) => {
     if (!snap && s === 'reconnecting') wrap.querySelector('.lb-status')?.replaceChildren('Connecting…');
   });
 
-  function renderList(): void {
+  function renderList(notice?: string): void {
     const s = snap!;
+    const prevList = wrap.querySelector<HTMLElement>('.lb-list');
+    const scroll = view === 'list' && prevList ? prevList.scrollTop : 0;
+    view = 'list';
+    shownKey = rosterKey(s);
+    error = null;
     const list = el('div', 'lb-list');
     for (const id of s.teamOrder) {
       const team = s.teams[id];
@@ -64,11 +84,19 @@ export function showNamePicker(root: HTMLElement, net: Net, h: PickerHandlers): 
     add.addEventListener('click', () => renderAdd());
     const foot = el('div', 'lb-foot', undefined);
     foot.replaceChildren(add, creditsLink());
-    wrap.replaceChildren(el('h1', undefined, 'Who are you?'), list, foot);
+    const head: HTMLElement[] = [el('h1', undefined, 'Who are you?')];
+    if (notice) {
+      const n = el('p', 'lb-error', notice);
+      n.setAttribute('role', 'alert');
+      head.push(n);
+    }
+    wrap.replaceChildren(...head, list, foot);
+    list.scrollTop = scroll;
   }
 
   function renderAdd(): void {
     const s = snap!;
+    view = 'add';
     const form = el('div', 'lb-form');
     const input = el('input');
     input.type = 'text';
@@ -109,7 +137,12 @@ export function showNamePicker(root: HTMLElement, net: Net, h: PickerHandlers): 
   }
 
   return {
-    showError(message) { if (error) error.textContent = message; },
+    showError(message) {
+      // T9: an addSelf whose welcome was lost to a reconnect already added the name. Re-adding it
+      // says it is taken, so show the (re-peeked) list where the name can simply be tapped.
+      if (message === NAME_TAKEN && snap) { renderList(`${NAME_TAKEN}. Find your name below and tap it.`); return; }
+      if (error) error.textContent = message;
+    },
     destroy() { off(); offState(); wrap.remove(); },
   };
 }

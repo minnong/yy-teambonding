@@ -55,3 +55,12 @@ export class MoveThrottle {
   /** Drops the queued move (a keyboard walk took over, or the scene is going away). */
   clear(): void { this.pending = null; }
 }
+
+/** A tap whose move is held longer than this by the throttle or the act cap gets one notice (T12). */
+export const MOVE_HELD_NOTICE_MS = 2000;
+
+/** The toast for a move held `waitMs`, or null when the wait is too short to mention. */
+export function moveHeldText(waitMs: number): string | null {
+  if (!(waitMs > MOVE_HELD_NOTICE_MS)) return null;
+  return `Slow down a little! You will walk there in ${Math.ceil(waitMs / 1000)} s 🙂`;
+}
