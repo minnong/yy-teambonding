@@ -265,6 +265,10 @@ describe('room: validation and host auth', () => {
     await sync(c);
   });
 
+  it('runs without .dev.vars: the test config binds a test-only HOST_PIN (M11)', () => {
+    expect(env.HOST_PIN).toBe('test-only-pin');
+  });
+
   it('host with wrong pin is closed 4001', async () => {
     const stub = freshRoom();
     const c = await connect(stub);
