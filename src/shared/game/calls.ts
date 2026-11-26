@@ -101,8 +101,11 @@ const undoCall: Handler<'host.undoCall'> = (state, _a, ctx) => {
   state.callTimes.pop();
   state.lastCallAt = state.callTimes.at(-1) ?? state.competitionStartedAt;
   const out: Outbound[] = [{ to: 'all', msg: { type: 'banner', text: backBanner(t.name) } }];
-  // The previous last team standing loses the boss for now (q: null, done: false).
+  // The previous last team standing loses the boss for now (q: null); or, if this undo leaves
+  // exactly one team playing (the final call was undone), that team gets its boss step back.
   if (hadBoss) out.push(bossMsg(state, hadBoss, ctx, false));
+  const nowBoss = bossTeam(state);
+  if (nowBoss) out.push(bossMsg(state, nowBoss, ctx));
   return ok(out, { persist: true, snapshot: true });
 };
 

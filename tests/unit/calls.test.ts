@@ -336,6 +336,20 @@ describe('calls: final boss', () => {
     expect(m).toEqual(mb);
   });
 
+  it('undoing the call of the last team standing gives it the boss back', () => {
+    const s = onlyMapleLeft(1000);
+    place(s, 'p31', spawnFor(6, 0));
+    run(s, { type: 'bossAnswer', playerId: 'p31', text: STEPS[0]!.answers[0]! }, 20000);
+    expect(callNext(s, 21000).error).toBeUndefined(); // maple called: nobody left playing
+    expect(playing(s)).toEqual([]);
+    expect(nextLeader(s)).toBeNull();
+    const u = run(s, { type: 'host.undoCall' }, 22000);
+    expect(u.error).toBeUndefined();
+    expect(playing(s)).toEqual(['maple']);
+    expect(bossMsgs(u)).toEqual([{ to: { team: 'maple' }, msg: { type: 'boss', index: 1, q: STEPS[1]!.q, done: false } }]);
+    expect(run(s, { type: 'bossAnswer', playerId: 'p31', text: STEPS[1]!.answers[0]! }, 23000).error).toBeUndefined();
+  });
+
   it('boss progress survives an undo', () => {
     const s = onlyMapleLeft(1000);
     place(s, 'p31', spawnFor(6, 0));
