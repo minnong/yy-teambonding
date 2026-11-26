@@ -60,3 +60,20 @@ test('mobile: tap moves my avatar', async ({ page }) => {
   expect(after).not.toBeNull();
   expect(Math.hypot(after!.x - before!.x, after!.y - before!.y)).toBeGreaterThan(16);
 });
+
+test('mobile: rapid taps coalesce into one move per second (R27)', async ({ page }) => {
+  const moves: number[] = [];
+  page.on('websocket', (ws) => ws.on('framesent', (f) => {
+    if (typeof f.payload === 'string' && f.payload.includes('"type":"move"')) moves.push(Date.now());
+  }));
+  await joinAsNewcomer(page, 'E2E Tapper', 'Nova');
+  const t0 = Date.now();
+  for (let i = 0; i < 6; i++) { await tapFloor(page, 0.3 + i * 0.08, 0.66); await page.waitForTimeout(80); }
+  await page.waitForTimeout(400);
+  expect(moves.length).toBe(1); // the first tap went at once, the rest are queued
+  await page.waitForTimeout(1200);
+  expect(moves.length).toBe(2); // one trailing move with the latest target
+  // Timed here on the test runner as frame events arrive (async), so allow a little jitter.
+  expect(moves[1]! - moves[0]!).toBeGreaterThanOrEqual(950);
+  expect(moves[0]! - t0).toBeLessThan(400);
+});

@@ -7,6 +7,11 @@ import { defineConfig, devices } from '@playwright/test';
 const port = Number(process.env.E2E_PORT ?? 5173);
 const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${port}`;
 const chrome = { browserName: 'chromium' as const, channel: 'chrome' };
+// Every test resets the room: never let a stray E2E_BASE_URL point this at a deployed event.
+const e2eHost = new URL(baseURL).hostname;
+if (e2eHost !== 'localhost' && e2eHost !== '127.0.0.1') {
+  throw new Error(`e2e tests reset the room, so they only run against localhost/127.0.0.1, not ${e2eHost}`);
+}
 
 export default defineConfig({
   testDir: 'tests/e2e',

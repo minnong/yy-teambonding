@@ -140,3 +140,37 @@ export function buttonStates(h: HostState | null, pending: boolean): ButtonState
     people: s.phase === 'warmup',
   };
 }
+
+// ---------- action guard (fix round 1) ----------
+
+/**
+ * A double tap is 100–250 ms apart and a local reply can land in 50–200 ms, so releasing the
+ * one-shot guard on the reply alone lets the second tap through (Pause then Resume in the same
+ * cell, +10 twice). Buttons therefore stay locked for REPLY_COOLDOWN_MS after the reply, and for
+ * MODAL_GUARD_MS after a modal opens or closes (a tap meant for the modal must not land on the
+ * button underneath, and a tap meant for the button must not land on the modal's OK).
+ */
+export const REPLY_COOLDOWN_MS = 500;
+export const MODAL_GUARD_MS = 400;
+
+export interface Guard {
+  /** A host action was sent and neither its hostState nor an error has come back. */
+  pending: boolean;
+  /** The socket is open. */
+  connected: boolean;
+  lastReplyAt: number | null;
+  modalChangedAt: number | null;
+}
+
+/** When the timing part of the lock ends (0 if it never started). */
+export function guardUntil(g: Guard): number {
+  return Math.max(
+    g.lastReplyAt === null ? 0 : g.lastReplyAt + REPLY_COOLDOWN_MS,
+    g.modalChangedAt === null ? 0 : g.modalChangedAt + MODAL_GUARD_MS,
+  );
+}
+
+/** True while host buttons must ignore taps. */
+export function isLocked(g: Guard, now: number): boolean {
+  return g.pending || !g.connected || now < guardUntil(g);
+}

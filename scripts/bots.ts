@@ -5,6 +5,8 @@
 //
 // --reset  host.reset before (bots need warm-up to addSelf) and after (removes the bots)
 // --start  host.startCompetition once every bot has joined, and one quiz half-way through
+// --allow-remote  required for any URL that is not localhost/127.0.0.1. A remote room in the
+//          competition is never reset, with or without this flag.
 //
 // Rate per bot: one `move` every 3–6 s, plus occasional icebreakers, emotes, riddle attempts (a
 // wrong answer, then skip) and random quiz answers. Departed teams and a paused room go quiet,
@@ -21,7 +23,7 @@ type HostState = Extract<ServerMsg, { type: 'hostState' }>;
 // ---------- args ----------
 
 function parseArgs(argv: string[]) {
-  const o = { url: 'http://localhost:5173', bots: 35, minutes: 5, pin: process.env.HOST_PIN ?? '1234', reset: false, start: false };
+  const o = { url: 'http://localhost:5173', bots: 35, minutes: 5, pin: process.env.HOST_PIN ?? '1234', reset: false, start: false, allowRemote: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     const val = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${a} needs a value`); return v; };
@@ -31,6 +33,7 @@ function parseArgs(argv: string[]) {
     else if (a === '--pin') o.pin = val();
     else if (a === '--reset') o.reset = true;
     else if (a === '--start') o.start = true;
+    else if (a === '--allow-remote') o.allowRemote = true;
     else throw new Error(`unknown flag ${a}`);
   }
   if (!Number.isInteger(o.bots) || o.bots < 1 || o.bots > 99) throw new Error('--bots must be 1..99');
@@ -40,6 +43,12 @@ function parseArgs(argv: string[]) {
 
 const args = parseArgs(process.argv.slice(2));
 const WS_URL = `${args.url.replace(/^http/, 'ws').replace(/\/$/, '')}/ws`;
+const HOSTNAME = new URL(args.url).hostname;
+const IS_LOCAL = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(HOSTNAME);
+if (!IS_LOCAL && !args.allowRemote) {
+  console.error(`Refusing to run bots against ${HOSTNAME}: pass --allow-remote for a non-local room.`);
+  process.exit(1);
+}
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)]!;
@@ -274,11 +283,32 @@ class Bot {
 async function main(): Promise<void> {
   log(`bots: ${args.bots}, minutes: ${args.minutes}, url: ${args.url}, reset: ${args.reset}, start: ${args.start}`);
   const host = await openHost();
-  if (host.state().snapshot.phase !== 'warmup' && !args.reset) {
-    console.error('The room is already in the competition: bots join with addSelf, which only works in warm-up. Re-run with --reset.');
-    host.close();
-    process.exit(1);
+  if (host.state().snapshot.phase !== 'warmup') {
+    if (!IS_LOCAL) {
+      // A live event: never reset it, and do not suggest how to.
+      console.error(args.reset
+        ? `Refusing to reset ${HOSTNAME}: that room is in the competition.`
+        : `The room at ${HOSTNAME} is in the competition: bots can only join during warm-up.`);
+      host.close();
+      process.exit(1);
+    }
+    if (!args.reset) {
+      console.error('The room is already in the competition: bots join with addSelf, which only works in warm-up. Re-run with --reset.');
+      host.close();
+      process.exit(1);
+    }
   }
+  // From here on, an interrupt or a crash still closes the bots and (with --reset) removes them.
+  let cleaned = false;
+  cleanup = async () => {
+    if (cleaned) return;
+    cleaned = true;
+    for (const b of bots) b.close();
+    if (args.reset) {
+      await host.act({ type: 'host.reset' }).then(() => log('room reset (bots removed)'), (e: Error) => log(`final reset failed: ${e.message}`));
+    }
+    host.close();
+  };
   if (args.reset) { await host.act({ type: 'host.reset' }); log('room reset'); }
   const startCount = host.state().msgCount;
   const hostSentAtStart = hostSent;
@@ -335,11 +365,14 @@ async function main(): Promise<void> {
   console.log(`projected 35-min messages for 36 players + 1 host: ${per36} (budget ${MESSAGE_BUDGET.toLocaleString('en-US')}: ${per36 < MESSAGE_BUDGET ? 'OK' : 'OVER'})`);
   console.log(`server msgCount today: ${endCount}`);
 
-  for (const b of bots) b.close();
-  if (args.reset) { await host.act({ type: 'host.reset' }); log('room reset (bots removed)'); }
-  host.close();
+  await cleanup();
   await sleep(200);
   process.exit(per36 < MESSAGE_BUDGET ? 0 : 2);
 }
 
-main().catch((e: unknown) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });
+let cleanup: (() => Promise<void>) | null = null;
+const bail = (code: number) => { void (cleanup?.() ?? Promise.resolve()).finally(() => process.exit(code)); };
+process.on('SIGINT', () => { log('interrupted: cleaning up'); bail(130); });
+process.on('SIGTERM', () => bail(143));
+
+main().catch((e: unknown) => { console.error(e instanceof Error ? e.message : e); bail(1); });

@@ -104,3 +104,45 @@ test('host: people panel moves a player in warm-up only', async ({ page }) => {
   await expect(page.locator('.h-team-head', { hasText: 'Otter' })).toHaveText('Otter 0/4');
   await expect(page.getByLabel('Goes first')).toHaveValue('otter');
 });
+
+/** Two raw taps at the centre of `target`, the second 150 ms after the first and after the reply. */
+async function doubleTapAfterReply(page: Page, target: ReturnType<Page['locator']>, replied: () => Promise<void>): Promise<void> {
+  await expect(target).toBeEnabled(); // past any earlier cooldown, so the first tap counts
+  const box = (await target.boundingBox())!;
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  const t0 = Date.now();
+  await page.touchscreen.tap(x, y);
+  await replied();
+  await page.waitForTimeout(Math.max(0, 150 - (Date.now() - t0)));
+  await page.touchscreen.tap(x, y); // raw input: no waiting for the button to be enabled
+  await page.waitForTimeout(1000);
+}
+
+test('host: a double tap 150 ms apart sends once, even after the reply came back', async ({ page, baseURL }) => {
+  await openHost(page);
+  const pill = page.locator('.h-pill');
+  // Pause and Resume share one grid cell: the second tap must not resume.
+  await doubleTapAfterReply(page, page.getByRole('button', { name: 'Pause' }), () => expect(pill).toHaveText('PAUSED', { timeout: 140 }));
+  await expect(pill).toHaveText('PAUSED');
+  await page.getByRole('button', { name: 'Resume' }).click();
+  await expect(pill).toHaveText('WARM-UP');
+
+  await page.getByRole('tab', { name: 'Scores' }).click();
+  const pixel = page.locator('.h-adj', { hasText: 'Pixel' }).locator('strong');
+  await doubleTapAfterReply(page, page.getByRole('button', { name: 'Add 10 points to Pixel' }), () => expect(pixel).toHaveText('10 pts', { timeout: 140 }));
+  await expect(pixel).toHaveText('10 pts');
+
+  // The second tap on "Yes, call them" lands on whatever is under it once the modal closes.
+  const side = await hostSocket(baseURL!);
+  try { await side.act({ type: 'host.startCompetition' }); } finally { side.close(); }
+  await page.getByRole('tab', { name: 'Run' }).click();
+  await expect(pill).toHaveText('COMPETITION');
+  await callBtn(page).click();
+  const ok = dialog(page).getByRole('button', { name: 'Yes, call them' });
+  await expect(ok).toBeEnabled();
+  await doubleTapAfterReply(page, ok, () => expect(board(page).locator('.h-row-departed')).toHaveCount(2, { timeout: 140 }));
+  await expect(board(page).locator('.h-row-departed')).toHaveCount(2);
+  await expect(pill).toHaveText('COMPETITION');
+  await expect(page.getByRole('button', { name: 'QUICK-FIRE QUIZ' })).toBeVisible();
+  await expect(dialog(page)).toHaveCount(0);
+});

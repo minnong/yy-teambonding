@@ -14,6 +14,7 @@ import { TableView } from './tables';
 import { BoardView } from './leaderboard';
 import { ZOOM_TWEEN_MS, chooseView, clampCenter, easeInOut, lerp } from './camera';
 import { attachKeyboard, attachTaps } from './input';
+import { MoveThrottle } from './moveThrottle';
 import { SceneEffects, type RoomEffects } from './effects';
 
 export interface RoomApi {
@@ -44,6 +45,9 @@ export class RoomScene extends Phaser.Scene {
   private board!: BoardView;
   private readonly sparkles = new Map<string, Phaser.GameObjects.Image>();
   private marker!: Phaser.GameObjects.Image;
+  /** R27: at most 1 move/s and 20 per rolling minute; extra taps fold into one trailing move. */
+  private readonly moves = new MoveThrottle();
+  private moveTimer: ReturnType<typeof setTimeout> | null = null;
   private vignette!: Phaser.GameObjects.Image;
   private detach: (() => void)[] = [];
   private lastWall = 0;
@@ -157,6 +161,7 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private shutdown(): void {
+    this.cancelQueuedMove();
     for (const d of this.detach) d();
     this.detach = [];
     this.fx?.destroy();
@@ -229,10 +234,31 @@ export class RoomScene extends Phaser.Scene {
       return;
     }
     const to = { x: Math.round(Phaser.Math.Clamp(w.x, 0, WORLD_W)), y: Math.round(Phaser.Math.Clamp(w.y, 0, WORLD_H)) };
-    this.net.act({ type: 'move', to });
+    // The marker shows at once; the move itself may be coalesced into a trailing send (R27).
+    const now = Date.now();
+    const go = this.moves.request(to, now);
+    if (go) this.net.act({ type: 'move', to: go });
+    else this.scheduleQueuedMove();
     this.tweens.killTweensOf(this.marker);
     this.marker.setPosition(to.x, to.y).setVisible(true).setAlpha(1).setScale(0.6);
     this.tweens.add({ targets: this.marker, scale: 1.3, alpha: 0, duration: 650, ease: 'Quad.easeOut', onComplete: () => this.marker.setVisible(false) });
+  }
+
+  private scheduleQueuedMove(): void {
+    const at = this.moves.nextAt();
+    if (at === null || this.moveTimer !== null) return;
+    this.moveTimer = setTimeout(() => {
+      this.moveTimer = null;
+      const go = this.moves.flush(Date.now());
+      if (go) this.net.act({ type: 'move', to: go });
+      else this.scheduleQueuedMove(); // woke a hair early
+    }, Math.max(0, at - Date.now()));
+  }
+
+  /** Drops a queued trailing move (a keyboard walk takes over, or the scene is going away). */
+  cancelQueuedMove(): void {
+    this.moves.clear();
+    if (this.moveTimer !== null) { clearTimeout(this.moveTimer); this.moveTimer = null; }
   }
 
   // ---------- proximity ----------
@@ -362,7 +388,7 @@ export function startRoom(net: Net, me: Me, snapshot: PublicSnapshot): RoomApi {
   resize();
 
   const detachKeys = attachKeyboard({
-    walk: (dir) => { net.act({ type: 'walk', dir }); },
+    walk: (dir) => { scene.cancelQueuedMove(); net.act({ type: 'walk', dir }); },
     stop: () => { net.act({ type: 'stop' }); },
   });
   const unsubs = [

@@ -96,13 +96,16 @@ const callNext: Handler<'host.callNext'> = (state, a, ctx) => {
 /**
  * Reverts the latest call, never the goesFirst departure. The team plays (and scores) again with
  * its score untouched; boss progress (bossIndex/bossDone) is kept for whoever had it. Allowed
- * while paused: the host may pause straight after a mis-call.
+ * while paused: the host may pause straight after a mis-call. With `expectedTeamId` (R26) it
+ * only undoes that team.
  */
-const undoCall: Handler<'host.undoCall'> = (state, _a, ctx) => {
+const undoCall: Handler<'host.undoCall'> = (state, a, ctx) => {
   if (state.phase !== 'competition') return err(NOT_COMPETING);
   const id = state.departures.at(-1);
   const t = id === undefined ? undefined : state.teams[id];
   if (!t || t.goesFirst || state.departures.length <= 1) return err('Nothing to undo');
+  // R26: the host confirmed undoing a specific team; another call since then must not be undone instead.
+  if (a.expectedTeamId !== undefined && a.expectedTeamId !== t.id) return err('The last call changed, check again');
   const hadBoss = bossTeam(state);
   t.status = 'playing';
   t.departedOrder = null;

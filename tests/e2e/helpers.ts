@@ -6,7 +6,14 @@ import type { HostAction, ServerMsg } from '../../src/shared/protocol';
 type HostState = Extract<ServerMsg, { type: 'hostState' }>;
 export const PIN = process.env.HOST_PIN ?? '1234';
 
+/** The e2e helpers reset the room: refuse anything that is not a local dev server. */
+export function assertLocal(baseURL: string): void {
+  const h = new URL(baseURL).hostname;
+  if (h !== 'localhost' && h !== '127.0.0.1') throw new Error(`refusing to touch a non-local room (${h}) from e2e tests`);
+}
+
 export function wsUrl(baseURL: string): string {
+  assertLocal(baseURL);
   return `${baseURL.replace(/^http/, 'ws')}/ws`;
 }
 
@@ -41,6 +48,7 @@ export async function hostSocket(baseURL: string) {
 
 /** Back to a fresh warm-up so every test starts from the same room. */
 export async function resetRoom(baseURL: string): Promise<void> {
+  assertLocal(baseURL);
   const h = await hostSocket(baseURL);
   try { await h.act({ type: 'host.reset' }); } finally { h.close(); }
 }

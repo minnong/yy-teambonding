@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { Heartbeat } from '../../src/client/host/heartbeat';
 import {
   budgetLevel, budgetPercent, budgetText, buttonStates, callConfirmText, callTimerState, formatElapsed,
   leaderboardRows, nextUpText, sinceLastCall, teamCountText, undoTarget, type HostState,
+  guardUntil, isLocked, MODAL_GUARD_MS, REPLY_COOLDOWN_MS, type Guard,
 } from '../../src/client/host/hostModel';
 import { CALL_AMBER_MS, CALL_GREEN_MS, MESSAGE_BUDGET } from '@shared/constants';
 import type { PublicSnapshot } from '@shared/protocol';
@@ -164,5 +166,68 @@ describe('buttonStates', () => {
   });
   it('undo label when there is nothing to undo', () => {
     expect(buttonStates(hs(snap()), false).undoLabel).toBe('Undo last call');
+  });
+});
+
+describe('action guard timing (fix round 1)', () => {
+  const base: Guard = { pending: false, connected: true, lastReplyAt: null, modalChangedAt: null };
+  it('a second tap 150 ms after the first is swallowed even when the reply came back at 60 ms', () => {
+    // tap 1 at t=1000 sends; the reply lands at 1060; tap 2 at 1150 (a real double-tap gap)
+    const g: Guard = { ...base, lastReplyAt: 1060 };
+    expect(isLocked(g, 1150)).toBe(true);
+    expect(isLocked(g, 1060 + REPLY_COOLDOWN_MS - 1)).toBe(true);
+    expect(isLocked(g, 1060 + REPLY_COOLDOWN_MS)).toBe(false);
+    expect(REPLY_COOLDOWN_MS).toBeGreaterThanOrEqual(500);
+  });
+  it('taps are swallowed for ~400 ms after a modal opens or closes', () => {
+    const g: Guard = { ...base, modalChangedAt: 2000 };
+    expect(isLocked(g, 2150)).toBe(true);
+    expect(isLocked(g, 2000 + MODAL_GUARD_MS - 1)).toBe(true);
+    expect(isLocked(g, 2000 + MODAL_GUARD_MS)).toBe(false);
+    expect(MODAL_GUARD_MS).toBeGreaterThanOrEqual(400);
+  });
+  it('locked while a send is pending or the socket is not open', () => {
+    expect(isLocked({ ...base, pending: true }, 1e9)).toBe(true);
+    expect(isLocked({ ...base, connected: false }, 1e9)).toBe(true);
+    expect(isLocked(base, 0)).toBe(false);
+  });
+  it('guardUntil is when the timing lock ends (to schedule a re-render)', () => {
+    expect(guardUntil(base)).toBe(0);
+    expect(guardUntil({ ...base, lastReplyAt: 1000, modalChangedAt: 1300 })).toBe(Math.max(1000 + REPLY_COOLDOWN_MS, 1300 + MODAL_GUARD_MS));
+  });
+});
+
+describe('Heartbeat (fix round 1)', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+  it('pings every interval and reports a miss when no pong comes within the deadline', () => {
+    const pings: number[] = [];
+    let misses = 0;
+    const hb = new Heartbeat(() => { pings.push(Date.now()); return true; }, () => { misses++; }, 15000, 5000);
+    hb.start();
+    vi.advanceTimersByTime(14999);
+    expect(pings).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    expect(pings).toHaveLength(1);
+    hb.pong();
+    vi.advanceTimersByTime(5000);
+    expect(misses).toBe(0);
+    vi.advanceTimersByTime(10000); // second ping, unanswered
+    expect(pings).toHaveLength(2);
+    vi.advanceTimersByTime(4999);
+    expect(misses).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(misses).toBe(1);
+    hb.stop();
+    vi.advanceTimersByTime(60000);
+    expect(pings).toHaveLength(2);
+  });
+  it('a ping that could not be sent (socket not open) sets no deadline', () => {
+    let misses = 0;
+    const hb = new Heartbeat(() => false, () => { misses++; }, 1000, 500);
+    hb.start();
+    vi.advanceTimersByTime(5000);
+    expect(misses).toBe(0);
+    hb.stop();
   });
 });

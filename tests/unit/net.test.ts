@@ -186,3 +186,18 @@ describe('Net', () => {
     expect(fn).toHaveBeenCalledWith({ code: 4003, reason: '' });
   });
 });
+
+describe('Net heartbeat frames (fix round 1)', () => {
+  it('ping() sends the raw runtime auto-response frame and a raw pong emits "pong"', () => {
+    const { net } = mk();
+    expect(net.ping()).toBe(false); // nothing open yet
+    net.connect({ t: 'hostHello', pin: '1234' });
+    last().open();
+    let pongs = 0;
+    net.on('pong', () => { pongs++; });
+    expect(net.ping()).toBe(true);
+    expect(last().sent.at(-1)).toBe('ping');
+    last().onmessage?.({ data: 'pong' });
+    expect(pongs).toBe(1);
+  });
+});

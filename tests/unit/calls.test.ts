@@ -218,6 +218,22 @@ describe('calls: host.undoCall', () => {
     expect(w).toEqual(wb);
   });
 
+  it('R26: undo with expectedTeamId only undoes that team', () => {
+    const s = competing(1000);
+    s.teams.koala!.score = 50;
+    run(s, { type: 'host.callNext', expectedTeamId: 'koala' }, 300000);
+    const before = clone(s);
+    const bad = run(s, { type: 'host.undoCall', expectedTeamId: 'pixel' }, 310000);
+    expect(bad.error).toBe('The last call changed, check again');
+    expect(bad.out).toEqual([]);
+    expect(s).toEqual(before);
+    const ok = run(s, { type: 'host.undoCall', expectedTeamId: 'koala' }, 311000);
+    expect(ok.error).toBeUndefined();
+    expect(s.teams.koala!.status).toBe('playing');
+    // with only the goesFirst departure left there is nothing to undo, whatever was expected
+    expect(run(s, { type: 'host.undoCall', expectedTeamId: 'otter' }, 312000).error).toBe('Nothing to undo');
+  });
+
   it('undo works while paused (the host may pause on a mis-call)', () => {
     const s = competing(1000);
     s.teams.koala!.score = 50;

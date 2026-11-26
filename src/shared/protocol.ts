@@ -31,7 +31,8 @@ export type AddSelfAction = { type: 'addSelf'; name: string; teamId: TeamId };
 export type HostAction =
   | { type: 'host.startCompetition' }
   | { type: 'host.callNext'; expectedTeamId: TeamId }
-  | { type: 'host.undoCall' }
+  /** R26: `expectedTeamId` (optional) is the team the host saw it would bring back. */
+  | { type: 'host.undoCall'; expectedTeamId?: TeamId }
   | { type: 'host.quizStart' }
   | { type: 'host.adjustScore'; teamId: TeamId; delta: number }
   | { type: 'host.pause' }
@@ -153,7 +154,7 @@ export type PlayerWireAction = DistributiveOmit<
 export const HostActionSchema = z.discriminatedUnion('type', [
   act('host.startCompetition'),
   act('host.callNext', { expectedTeamId: id }),
-  act('host.undoCall'),
+  act('host.undoCall', { expectedTeamId: id.optional() }),
   act('host.quizStart'),
   act('host.adjustScore', { teamId: id, delta: z.number().int().min(-10000).max(10000) }),
   act('host.pause'),

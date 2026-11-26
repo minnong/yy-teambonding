@@ -1,5 +1,5 @@
 // Client socket layer: reconnect with backoff, hello replay, clock offset from server timestamps.
-// No pings: keep-alive is the runtime's raw ping/pong, and every message costs budget.
+// No JSON pings: keep-alive is the runtime's raw ping/pong (uncounted); every JSON message costs budget.
 import type { ClientMsg, PlayerWireAction, HostAction, ServerMsg } from '@shared/protocol';
 
 export type ClientHello = Extract<ClientMsg, { t: 'hello' | 'addSelf' | 'hostHello' }>;
@@ -13,6 +13,9 @@ export const RECONNECT_DELAYS = [500, 1000, 2000, 5000];
 const NO_RECONNECT = new Set([4000, 4001, 4003]);
 const RESET_CODE = 4002;
 const MAX_SAMPLES = 5;
+/** Must match the Room's WebSocketRequestResponsePair('ping', 'pong'). */
+const PING = 'ping';
+const PONG = 'pong';
 
 /** Median of `server - (sent+received)/2`. */
 export function clockOffset(samples: ClockSample[]): number {
@@ -30,7 +33,7 @@ export interface NetOptions {
   visibility?: VisibilitySource;
 }
 
-type Events = { [K in ServerMsg['type']]: Extract<ServerMsg, { type: K }> } & { close: CloseInfo; state: NetState };
+type Events = { [K in ServerMsg['type']]: Extract<ServerMsg, { type: K }> } & { close: CloseInfo; state: NetState; pong: null };
 type Handler<T> = (m: T) => void;
 
 function defaultUrl(): string {
@@ -94,6 +97,15 @@ export class Net {
     return true;
   }
   act(a: PlayerWireAction): boolean { return this.send({ t: 'act', a }); }
+  /**
+   * Raw keep-alive probe. The Room answers `ping` with `pong` via setWebSocketAutoResponse, so it
+   * is not counted in msgCount and does not wake the object. Emits 'pong' when the answer comes.
+   */
+  ping(): boolean {
+    if (!this.ws || this.ws.readyState !== 1) return false;
+    this.ws.send(PING);
+    return true;
+  }
   host(a: HostAction): boolean { return this.send({ t: 'host', a }); }
 
   on<K extends keyof Events>(type: K, fn: Handler<Events[K]>): () => void {
@@ -154,6 +166,7 @@ export class Net {
   private firstSend = true;
 
   private onMessage(raw: string): void {
+    if (raw === PONG) { this.emit('pong', null); return; }
     let m: ServerMsg;
     try { m = JSON.parse(raw) as ServerMsg; } catch { return; }
     const now = Date.now();

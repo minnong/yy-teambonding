@@ -8,9 +8,10 @@ import { add, button, el } from '../ui/dom';
 import type { HostAction } from '@shared/protocol';
 import type { TeamId } from '@shared/types';
 import {
-  budgetLevel, budgetText, buttonStates, callConfirmText, callTimerState, leaderboardRows, nextUpText,
-  sinceLastCall, teamCountText, undoTarget, type ButtonStates, type HostState,
+  budgetLevel, budgetText, buttonStates, callConfirmText, callTimerState, guardUntil, isLocked, leaderboardRows,
+  MODAL_GUARD_MS, nextUpText, sinceLastCall, teamCountText, undoTarget, type ButtonStates, type Guard, type HostState,
 } from './hostModel';
+import { Heartbeat } from './heartbeat';
 
 const PIN_KEY = 'lobby.hostPin';
 /** A reply that never comes (socket died mid-send) must not lock the console for good. */
@@ -18,6 +19,7 @@ const PENDING_TIMEOUT_MS = 8000;
 /** Hidden this long (phone locked): reconnect on unlock even if the socket still claims to be open. */
 const STALE_HIDDEN_MS = 15000;
 const LEADER_CHANGED = 'The leader changed, check again';
+const LAST_CALL_CHANGED = 'The last call changed, check again';
 
 type Tab = 'run' | 'scores' | 'people' | 'qr';
 
@@ -27,8 +29,11 @@ const net = new Net();
 let pin: string | null = readPin();
 let hs: HostState | null = null;
 let authed = false;
-let pending = false;
+/** The one-shot guard plus its timing (see hostModel isLocked). */
+const guard: Guard = { pending: false, connected: false, lastReplyAt: null, modalChangedAt: null };
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+let unlockTimer: ReturnType<typeof setTimeout> | null = null;
+const locked = () => isLocked(guard, Date.now());
 let tab: Tab = 'run';
 const samples: ClockSample[] = [];
 let offset = 0;
@@ -54,8 +59,26 @@ function toast(text: string, kind: 'error' | 'info' = 'error'): void {
   setTimeout(() => t.remove(), kind === 'error' ? 6000 : 3000);
 }
 
+/** Re-render when the timing lock ends, so buttons come back without waiting for the next hostState. */
+function scheduleUnlock(): void {
+  const wait = guardUntil(guard) - Date.now();
+  if (wait <= 0) return;
+  if (unlockTimer !== null) clearTimeout(unlockTimer);
+  unlockTimer = setTimeout(() => { unlockTimer = null; render(); }, wait + 10);
+}
+
 let modal: HTMLElement | null = null;
-function closeModal(): void { modal?.remove(); modal = null; }
+function modalChanged(): void {
+  guard.modalChangedAt = Date.now();
+  render();
+  scheduleUnlock();
+}
+function closeModal(): void {
+  if (!modal) return;
+  modal.remove();
+  modal = null;
+  modalChanged();
+}
 
 interface ConfirmOpts {
   text: string;
@@ -74,7 +97,18 @@ function confirmBox(o: ConfirmOpts): void {
   const msg = el('p', 'h-modal-text', o.text);
   msg.id = 'h-confirm-text';
   back.setAttribute('aria-labelledby', msg.id);
-  const okB = button(`h-btn ${o.danger ? 'h-danger' : 'h-go'}`, o.ok, () => { if (okB.disabled) return; closeModal(); o.onOk(); });
+  const openedAt = Date.now();
+  let typed = !o.typeWord;
+  const okB = button(`h-btn ${o.danger ? 'h-danger' : 'h-go'}`, o.ok, () => {
+    if (okB.disabled || Date.now() - openedAt < MODAL_GUARD_MS) return;
+    // Send first, then close: closing starts the after-modal tap guard, which must not block this send.
+    const mine = modal;
+    o.onOk();
+    if (modal === mine) closeModal();
+  });
+  // The tap that opened this dialog must not land on OK: OK wakes up after MODAL_GUARD_MS.
+  okB.disabled = true;
+  setTimeout(() => { okB.disabled = !typed; }, MODAL_GUARD_MS);
   const cancel = button('h-btn h-plain', 'Cancel', closeModal);
   add(box, msg);
   if (o.typeWord) {
@@ -85,8 +119,10 @@ function confirmBox(o: ConfirmOpts): void {
     input.setAttribute('autocapitalize', 'characters');
     input.setAttribute('aria-label', `Type ${word} to confirm`);
     input.placeholder = `Type ${word}`;
-    okB.disabled = true;
-    input.addEventListener('input', () => { okB.disabled = input.value.trim().toUpperCase() !== word; });
+    input.addEventListener('input', () => {
+      typed = input.value.trim().toUpperCase() === word;
+      okB.disabled = !typed || Date.now() - openedAt < MODAL_GUARD_MS;
+    });
     add(box, el('p', 'h-hint', `Type ${word} to confirm.`), input);
     setTimeout(() => input.focus(), 0);
   }
@@ -95,21 +131,43 @@ function confirmBox(o: ConfirmOpts): void {
   back.appendChild(box);
   document.body.appendChild(back);
   modal = back;
+  modalChanged();
 }
 
 // ---------- sending (one-shot guard) ----------
 
 function clearPending(): void {
-  pending = false;
+  guard.pending = false;
   if (pendingTimer !== null) { clearTimeout(pendingTimer); pendingTimer = null; }
 }
 
-/** Sends one host action; every host button is disabled until the next hostState or error. */
+/** The answer to our send arrived: unlock after the reply cooldown (a double tap's second half is swallowed). */
+function replied(): void {
+  if (guard.pending) guard.lastReplyAt = Date.now();
+  clearPending();
+  scheduleUnlock();
+}
+
+/** A fresh socket and hostHello (Net drops the old one). */
+function rehello(): void {
+  if (pin) net.connect({ t: 'hostHello', pin });
+}
+
+/**
+ * Sends one host action. Every host button is disabled until the next hostState or error, then
+ * for the reply cooldown; taps while locked are ignored.
+ */
 function send(a: HostAction): void {
-  if (pending) return;
+  if (!guard.connected) { toast('Not connected right now, try again in a moment'); return; }
+  if (locked()) return;
   if (!net.host(a)) { toast('Not connected right now, try again in a moment'); return; }
-  pending = true;
-  pendingTimer = setTimeout(() => { clearPending(); render(); }, PENDING_TIMEOUT_MS);
+  guard.pending = true;
+  pendingTimer = setTimeout(() => {
+    clearPending();
+    toast('No reply from the server — reconnecting…');
+    rehello();
+    render();
+  }, PENDING_TIMEOUT_MS);
   render();
 }
 
@@ -195,9 +253,9 @@ function buildConsole(): void {
 
 function buildRun(): HTMLElement {
   const p = el('section', 'h-panel h-run');
-  add(view.timer, el('div', 'h-timer-label', 'Time since last call'), view.timerValue, view.timerHint);
+  view.timer.replaceChildren(el('div', 'h-timer-label', 'Time since last call'), view.timerValue, view.timerHint);
   view.call = button('h-call', 'CALL NEXT TEAM', () => {
-    const s = buttonStates(hs, pending);
+    const s = buttonStates(hs, locked());
     const nl = hs?.nextLeader;
     if (!s.callNext || !nl) return;
     // The leader is fixed when the confirm opens; the server rejects it if it changed since.
@@ -205,19 +263,21 @@ function buildRun(): HTMLElement {
     confirmBox({ text: callConfirmText(expected), ok: 'Yes, call them', onOk: () => send({ type: 'host.callNext', expectedTeamId: expected.id }) });
   });
   view.start = button('h-btn h-go', 'START COMPETITION', () => {
-    if (!buttonStates(hs, pending).start || !hs) return;
+    if (!buttonStates(hs, locked()).start || !hs) return;
     const first = Object.values(hs.snapshot.teams).find((t) => t.goesFirst);
     const who = first ? `TEAM ${first.name.toUpperCase()} goes first and is sent out straight away.` : 'No team is set to go first.';
     confirmBox({ text: `Start the competition? ${who}`, ok: 'Start', onOk: () => send({ type: 'host.startCompetition' }) });
   });
-  view.quiz = button('h-btn', 'QUICK-FIRE QUIZ', () => { if (buttonStates(hs, pending).quiz) send({ type: 'host.quizStart' }); });
-  view.pause = button('h-btn', 'Pause', () => { if (buttonStates(hs, pending).pause) send({ type: 'host.pause' }); });
-  view.resume = button('h-btn h-go', 'Resume', () => { if (buttonStates(hs, pending).resume) send({ type: 'host.resume' }); });
+  view.quiz = button('h-btn', 'QUICK-FIRE QUIZ', () => { if (buttonStates(hs, locked()).quiz) send({ type: 'host.quizStart' }); });
+  view.pause = button('h-btn', 'Pause', () => { if (buttonStates(hs, locked()).pause) send({ type: 'host.pause' }); });
+  view.resume = button('h-btn h-go', 'Resume', () => { if (buttonStates(hs, locked()).resume) send({ type: 'host.resume' }); });
   view.undo = button('h-btn', 'Undo last call', () => {
-    if (!buttonStates(hs, pending).undo || !hs) return;
+    if (!buttonStates(hs, locked()).undo || !hs) return;
     const t = undoTarget(hs.snapshot);
     if (!t) return;
-    confirmBox({ text: `Bring TEAM ${t.name.toUpperCase()} back into the game?`, ok: 'Bring them back', onOk: () => send({ type: 'host.undoCall' }) });
+    // R26: the team is fixed when the confirm opens; the server refuses if the last call changed.
+    const expectedTeamId = t.id;
+    confirmBox({ text: `Bring TEAM ${t.name.toUpperCase()} back into the game?`, ok: 'Bring them back', onOk: () => send({ type: 'host.undoCall', expectedTeamId }) });
   });
   const grid = add(el('div', 'h-grid'), view.start, view.quiz, view.pause, view.resume, view.undo);
   add(p, view.timer, view.nextUp, view.call, view.callHint, grid, el('h2', '', 'Leaderboard'), view.board);
@@ -227,7 +287,7 @@ function buildRun(): HTMLElement {
 function buildScores(): HTMLElement {
   const p = el('section', 'h-panel');
   view.reset = button('h-btn h-danger', 'Reset event', () => {
-    if (!buttonStates(hs, pending).reset) return;
+    if (!buttonStates(hs, locked()).reset) return;
     confirmBox({
       text: 'Reset the whole event? Scores, calls and people added today are all cleared, and everyone goes back to the start.',
       ok: 'Continue', danger: true,
@@ -280,7 +340,7 @@ function render(): void {
   if (!authed || !hs) return;
   if (!view.built) buildConsole();
   const s = hs.snapshot;
-  const b = buttonStates(hs, pending);
+  const b = buttonStates(hs, locked());
 
   view.phase.textContent = s.paused ? 'PAUSED' : s.phase === 'warmup' ? 'WARM-UP' : 'COMPETITION';
   view.phase.className = `h-pill ${s.paused ? 'h-pill-paused' : s.phase === 'warmup' ? 'h-pill-warm' : 'h-pill-live'}`;
@@ -307,7 +367,7 @@ function renderRun(b: ButtonStates): void {
   view.callHint.textContent = s.phase === 'warmup' ? 'Press START COMPETITION first.'
     : s.paused ? 'Paused: resume to call the next team.'
     : !hs!.nextLeader ? 'Every team has been called.'
-    : pending ? 'Sending…' : '';
+    : guard.pending ? 'Sending…' : '';
   setBtn(view.start, b.start);
   setBtn(view.quiz, b.quiz);
   view.quiz!.textContent = s.quizActive ? 'QUIZ RUNNING…' : 'QUICK-FIRE QUIZ';
@@ -352,7 +412,7 @@ function renderScores(b: ButtonStates): void {
       const btns = el('div', 'h-adj-btns');
       for (const d of [-10, -5, 5, 10]) {
         const bt = button('h-btn h-small', d > 0 ? `+${d}` : `−${-d}`, () => {
-          if (buttonStates(hs, pending).adjust) send({ type: 'host.adjustScore', teamId: id, delta: d });
+          if (buttonStates(hs, locked()).adjust) send({ type: 'host.adjustScore', teamId: id, delta: d });
         }, `${d > 0 ? 'Add' : 'Take'} ${Math.abs(d)} points ${d > 0 ? 'to' : 'from'} ${t.name}`);
         r.btns.push(bt);
         btns.appendChild(bt);
@@ -478,15 +538,15 @@ net.on('hostState', (m) => {
   samples.push({ sent: Date.now(), server: m.snapshot.serverNow, received: Date.now() });
   if (samples.length > 5) samples.shift();
   offset = clockOffset(samples);
-  clearPending();
+  replied();
   if (!authed) { authed = true; view.built = false; }
   render();
   renderConn();
 });
 
 net.on('error', (m) => {
-  clearPending();
-  if (m.message === LEADER_CHANGED) closeModal();
+  replied();
+  if (m.message === LEADER_CHANGED || m.message === LAST_CALL_CHANGED) closeModal();
   toast(m.message);
   render();
 });
@@ -502,12 +562,31 @@ net.on('close', ({ code }) => {
   }
 });
 
-net.on('state', () => { if (view.built) { renderConn(); if (net.state !== 'open') { clearPending(); render(); } } });
+// While visible and open, a raw ping every 15 s must be answered within 5 s, or we re-hello. This
+// catches a socket that looks open but is dead, which no close event would ever report.
+const heartbeat = new Heartbeat(() => net.ping(), () => {
+  toast('Reconnecting…', 'info');
+  rehello();
+  renderConn();
+});
+net.on('pong', () => heartbeat.pong());
+function syncHeartbeat(): void {
+  if (net.state === 'open' && document.visibilityState === 'visible') heartbeat.start();
+  else heartbeat.stop();
+}
+
+net.on('state', () => {
+  guard.connected = net.state === 'open';
+  syncHeartbeat();
+  if (net.state !== 'open') clearPending();
+  if (view.built) { renderConn(); render(); }
+});
 
 // Unlocking a phone after a long lock: the socket may look open but be dead. Net already reconnects
 // at once when it knows the socket is down; this covers the "looks open" case with a fresh hello.
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
+  syncHeartbeat();
   if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
   const away = Date.now() - hiddenAt;
   setTimeout(() => {

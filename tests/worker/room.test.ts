@@ -396,6 +396,18 @@ describe('room: host actions with socket side effects', () => {
     expect(await p06.next('riddle')).toEqual({ type: 'riddle', index: 0, q: content.riddles[0]!.q, lockedUntil: 0 });
   });
 
+  it('R26: undoCall carries expectedTeamId on the wire; a stale one is refused', async () => {
+    const stub = freshRoom();
+    const [h] = await host(stub);
+    await start(h);
+    hostDo(h, { type: 'host.callNext', expectedTeamId: 'pixel' });
+    await h.next('hostState', (m) => m.snapshot.departures.length === 2);
+    hostDo(h, { type: 'host.undoCall', expectedTeamId: 'comet' });
+    expect((await h.next('error')).message).toBe('The last call changed, check again');
+    hostDo(h, { type: 'host.undoCall', expectedTeamId: 'pixel' });
+    expect((await h.next('hostState', (m) => m.snapshot.departures.length === 1)).snapshot.teams.pixel!.status).toBe('playing');
+  });
+
   it('a removed player is closed with 4003 and cannot hello again', async () => {
     const stub = freshRoom();
     const [h] = await host(stub);
