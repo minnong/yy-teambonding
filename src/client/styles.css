@@ -26,3 +26,8 @@ h1{margin:0;font-size:22px;line-height:32px;text-align:center}
 .lb-screen{justify-content:center}
 .lb-screen p{text-align:center;font-size:17px;margin:0}
 .lb-overlay{position:fixed;inset:0;z-index:500;background:#1a1a2e;display:flex;justify-content:center}
+/* Room (Task 10): canvas host, with the HUD layer (Task 11) above it. */
+.lb-room{position:absolute;inset:0;overflow:hidden;background:#1e1a2b;z-index:0}
+.lb-room canvas{display:block;touch-action:none;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+.lb-hud{position:absolute;inset:0;z-index:10;pointer-events:none}
+.lb-hud > *{pointer-events:auto}

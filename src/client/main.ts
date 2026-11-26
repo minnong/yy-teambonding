@@ -6,7 +6,7 @@ import { showNamePicker } from './join/namePicker';
 import type { PickerView } from './join/namePicker';
 import { browserToken, clearMe, loadMe, saveMe } from './identity';
 import type { Me } from './identity';
-import { startRoom } from './room/placeholder'; // Task 10 swaps this import for the real room scene
+import { startRoom } from './room/RoomScene';
 import type { PublicSnapshot } from '@shared/protocol';
 
 const app = document.querySelector<HTMLElement>('#app')!;
