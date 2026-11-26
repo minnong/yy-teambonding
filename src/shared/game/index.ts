@@ -6,28 +6,22 @@ import { type Ctx, type Handler, type Result, err } from './result';
 import { playerHandlers } from './players';
 import { phaseHandlers } from './phase';
 import { scoringHandlers } from './scoring';
+import { callsHandlers } from './calls';
 
 export type { Ctx, To, Outbound, Result, Handler, HandlerMap } from './result';
 export { ok, err, ignored } from './result';
 export { addPoints, onTeamDeparted } from './scoring';
+export { nextLeader, ordinal, departTeam } from './calls';
 export {
   createState, persistable, restore, slotOf, isPlayingTeam, activePlayers, type Persisted,
 } from './state';
 
-// ---- NOT YET IMPLEMENTED (Task 6) ----
-// Each later task deletes its keys here and spreads its own handler map into HANDLERS.
-const notYet = (_s: GameState, a: Action): Result => err(`Not implemented yet: ${a.type}`);
-const notYetImplemented = {
-  // Task 6 (game/calls.ts)
-  bossAnswer: notYet, 'host.callNext': notYet, 'host.undoCall': notYet,
-};
-
 /** Total over every Action type: the compiler flags any action without a handler. */
 const HANDLERS: { [T in ActionType]: Handler<T> } = {
-  ...notYetImplemented,
   ...playerHandlers,
   ...phaseHandlers,
   ...scoringHandlers,
+  ...callsHandlers,
 };
 
 /** Mutates `state`. On `error`, state is unchanged and nothing is sent except the error. */

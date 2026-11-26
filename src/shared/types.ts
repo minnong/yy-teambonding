@@ -23,6 +23,7 @@ export interface GameState {
   collectibles: Collectible[]; nextCollectibleAt: number | null;
   quiz: Quiz | null; nextQuizIndex: number; promptCursor: number;
   departures: TeamId[]; lastCallAt: number | null; competitionStartedAt: number | null;
+  callTimes: number[];                    // callTimes[i] = when departures[i] left (for undo)
   msgCount: { day: string; count: number };
   // runtime only, never persisted:
   motions: Record<PlayerId, Motion>; online: Record<PlayerId, boolean>; lastTickAt: number;

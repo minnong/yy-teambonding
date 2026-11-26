@@ -25,7 +25,7 @@ export function createState(content: Content, now: number): GameState {
     metPairs: [], icebreakers: {},
     collectibles: [], nextCollectibleAt: null,
     quiz: null, nextQuizIndex: 0, promptCursor: 0,
-    departures: [], lastCallAt: null, competitionStartedAt: null,
+    departures: [], lastCallAt: null, competitionStartedAt: null, callTimes: [],
     msgCount: { day: utcDay(now), count: 0 },
     motions: {}, online: {}, lastTickAt: now,
   };

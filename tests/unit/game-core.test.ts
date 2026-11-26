@@ -339,7 +339,7 @@ describe('game core: roster host actions', () => {
 });
 
 describe('game core: dispatcher, snapshot and persistence', () => {
-  it('actions owned by later tasks return an error and leave state unchanged', () => {
+  it('call and boss actions in warm-up return an error and leave state unchanged', () => {
     const s = room();
     const before = clone(s);
     for (const a of [
@@ -348,7 +348,8 @@ describe('game core: dispatcher, snapshot and persistence', () => {
       { type: 'bossAnswer', playerId: 'p01', text: 'x' },
     ] as Action[]) {
       const r = run(s, a, 2000);
-      expect(r.error).toMatch(/not implemented/i);
+      expect(r.error).toBeTruthy();
+      expect(r.error).not.toMatch(/not implemented/i);
       expect(r.out).toEqual([]);
     }
     expect(s).toEqual(before);

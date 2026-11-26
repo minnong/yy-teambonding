@@ -1,9 +1,10 @@
 // Phase transitions: start competition, pause/resume, reset.
 import { truncateAt } from '../motion';
 import { type Handler, type HandlerMap, ok, err } from './result';
-import { closeIcebreakers, createState } from './state';
+import { createState } from './state';
+import { departTeam } from './calls';
 
-export const upBanner = (name: string) => `🎉 Team ${name}, you're up! Head to the next activity.`;
+export { upBanner } from './calls';
 
 const startCompetition: Handler<'host.startCompetition'> = (state, _a, ctx) => {
   if (state.phase !== 'warmup') return err('The competition has already started');
@@ -15,16 +16,7 @@ const startCompetition: Handler<'host.startCompetition'> = (state, _a, ctx) => {
   state.lastCallAt = now;
   state.lastTickAt = now;
   for (const t of Object.values(state.teams)) { t.score = 0; t.scoreChangedAt = now; }
-  first.status = 'departed';
-  first.departedOrder = 1;
-  state.departures.push(first.id);
-  const members = new Set(Object.values(state.players).filter((p) => p.teamId === first.id).map((p) => p.id));
-  const out = closeIcebreakers(state, (ib) => members.has(ib.a) || members.has(ib.b), 'departed');
-  out.push(
-    { to: { team: first.id }, msg: { type: 'youreUp', teamId: first.id } },
-    { to: 'all', msg: { type: 'banner', text: upBanner(first.name) } },
-  );
-  return ok(out, { persist: true, snapshot: true });
+  return ok(departTeam(state, first.id, now), { persist: true, snapshot: true });
 };
 
 const pause: Handler<'host.pause'> = (state, _a, ctx) => {
