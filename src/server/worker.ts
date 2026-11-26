@@ -17,10 +17,6 @@ export default {
       }
       return env.ROOM.get(env.ROOM.idFromName('main')).fetch(req);
     }
-    if (url.pathname === '/host') {
-      url.pathname = '/host.html';
-      return env.ASSETS.fetch(new Request(url, req));
-    }
     return env.ASSETS.fetch(req);
   },
 } satisfies ExportedHandler<Env>;
