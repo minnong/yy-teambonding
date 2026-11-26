@@ -369,23 +369,24 @@ describe('scoring: collectibles and tick', () => {
     const s = competing(1000);
     s.collectibles.push({ id: 'c1', pos: SPOT });
     s.lastTickAt = 1000;
-    // p11 and p06 both walk through it during the same interval; p06 sorts first
+    // p16 (mango) and p11 (comet) both walk through it during the same interval; p11 sorts first
     const through = { path: [{ x: SPOT.x - 100, y: SPOT.y }, { x: SPOT.x + 100, y: SPOT.y }], startedAt: 1000 };
+    s.motions.p16 = structuredClone(through);
     s.motions.p11 = structuredClone(through);
-    s.motions.p06 = structuredClone(through);
-    // p08 is next to it, but offline
-    run(s, { type: 'disconnect', playerId: 'p08' }, 1000);
-    place(s, 'p08', SPOT);
+    // p06 (pixel, still playing) sorts before both and stands on it, but is offline
+    run(s, { type: 'disconnect', playerId: 'p06' }, 1000);
+    place(s, 'p06', SPOT);
     const r = run(s, { type: 'tick' }, 3000);
     expect(s.collectibles).toEqual([]);
-    expect(s.teams.pixel!.score).toBe(POINTS.collectible);
-    expect(s.teams.comet!.score).toBe(0);
-    expect(floats(r)).toEqual([{ type: 'float', teamId: 'pixel', text: '+15 sparkle' }]);
+    expect(s.teams.comet!.score).toBe(POINTS.collectible);
+    expect(s.teams.pixel!.score).toBe(0);
+    expect(s.teams.mango!.score).toBe(0);
+    expect(floats(r)).toEqual([{ type: 'float', teamId: 'comet', text: '+15 sparkle' }]);
     expect(r.snapshot).toBe(true);
     expect(r.persist).toBe(true);
     expect(s.lastTickAt).toBe(3000);
     const r2 = run(s, { type: 'tick' }, 4000);
-    expect(s.teams.pixel!.score).toBe(POINTS.collectible);
+    expect(s.teams.comet!.score).toBe(POINTS.collectible);
     expect(floats(r2)).toEqual([]);
   });
 
