@@ -57,8 +57,11 @@ export function restore(saved: Persisted, now: number): GameState {
 /** Table slot of a team (its index in teamOrder), or -1 if unknown. */
 export const slotOf = (state: GameState, teamId: TeamId): number => state.teamOrder.indexOf(teamId);
 
+/** A team id from the roster (own key only: '__proto__' or 'constructor' are never teams). */
+export const hasTeam = (state: GameState, teamId: TeamId): boolean => Object.hasOwn(state.teams, teamId);
+
 export const isPlayingTeam = (state: GameState, teamId: TeamId): boolean =>
-  state.teams[teamId]?.status === 'playing';
+  hasTeam(state, teamId) && state.teams[teamId]!.status === 'playing';
 
 /** Online, non-removed members of a team, in roster order. */
 export const activePlayers = (state: GameState, teamId: TeamId): PlayerId[] =>
@@ -68,7 +71,7 @@ export const activePlayers = (state: GameState, teamId: TeamId): PlayerId[] =>
 
 /** A live (known, non-removed) player, or undefined. */
 export const livePlayer = (state: GameState, id: PlayerId) => {
-  const p = state.players[id];
+  const p = Object.hasOwn(state.players, id) ? state.players[id] : undefined;
   return p && !p.removed ? p : undefined;
 };
 

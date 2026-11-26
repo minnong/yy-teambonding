@@ -6,7 +6,7 @@ import { isWalkable, toTile, toWorld } from '../layout';
 import { findPath } from '../path';
 import { positionAt, truncateAt } from '../motion';
 import { type Handler, type HandlerMap, type Result, ok, err, ignored, ONLY_WARMUP } from './result';
-import { closeIcebreakers, isPlayingTeam, livePlayer, spawnPoint } from './state';
+import { closeIcebreakers, hasTeam, isPlayingTeam, livePlayer, spawnPoint } from './state';
 
 const UNKNOWN_PLAYER = 'unknown player';
 const UNKNOWN_TEAM = 'unknown team';
@@ -20,7 +20,7 @@ const connect: Handler<'connect'> = (state, a, ctx) => {
 };
 
 const disconnect: Handler<'disconnect'> = (state, a) => {
-  if (!state.players[a.playerId]) return err(UNKNOWN_PLAYER);
+  if (!Object.hasOwn(state.players, a.playerId)) return err(UNKNOWN_PLAYER);
   delete state.online[a.playerId];
   const out = closeIcebreakers(state, (ib) => ib.a === a.playerId || ib.b === a.playerId, 'left');
   return ok(out, { snapshot: true });
@@ -34,7 +34,7 @@ function slugify(name: string): string {
 
 const addSelf: Handler<'addSelf'> = (state, a) => {
   if (state.phase !== 'warmup') return err(ONLY_WARMUP);
-  if (!state.teams[a.teamId]) return err(UNKNOWN_TEAM);
+  if (!hasTeam(state, a.teamId)) return err(UNKNOWN_TEAM);
   const name = typeof a.name === 'string' ? a.name.trim() : '';
   if (name.length < 1 || name.length > MAX_NAME) return err(`Name must be 1–${MAX_NAME} characters`);
   const lower = name.toLowerCase();
@@ -43,7 +43,7 @@ const addSelf: Handler<'addSelf'> = (state, a) => {
   if (taken) return err('That name is already on the list');
   const slug = slugify(name);
   let n = 1;
-  while (state.players[`x-${slug}-${n}`]) n++;
+  while (Object.hasOwn(state.players, `x-${slug}-${n}`)) n++;
   const id = `x-${slug}-${n}`;
   state.players[id] = { id, name, teamId: a.teamId, look: null, addedOnDay: true, removed: false };
   return { ...ok([], { persist: true, snapshot: true }), addedPlayerId: id };
@@ -134,7 +134,7 @@ const movePlayer: Handler<'host.movePlayer'> = (state, a) => {
   if (state.phase !== 'warmup') return err(ONLY_WARMUP);
   const p = livePlayer(state, a.playerId);
   if (!p) return err(UNKNOWN_PLAYER);
-  if (!state.teams[a.teamId]) return err(UNKNOWN_TEAM);
+  if (!hasTeam(state, a.teamId)) return err(UNKNOWN_TEAM);
   p.teamId = a.teamId;
   return ok([], { persist: true, snapshot: true });
 };
@@ -152,7 +152,7 @@ const removePlayer: Handler<'host.removePlayer'> = (state, a) => {
 
 const setGoesFirst: Handler<'host.setGoesFirst'> = (state, a) => {
   if (state.phase !== 'warmup') return err(ONLY_WARMUP);
-  if (!state.teams[a.teamId]) return err(UNKNOWN_TEAM);
+  if (!hasTeam(state, a.teamId)) return err(UNKNOWN_TEAM);
   for (const t of Object.values(state.teams)) t.goesFirst = t.id === a.teamId;
   return ok([], { persist: true, snapshot: true });
 };

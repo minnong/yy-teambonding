@@ -336,6 +336,22 @@ describe('game core: roster host actions', () => {
     expect(run(s, { type: 'host.setGoesFirst', teamId: 'nope' }, 1000).error).toBeTruthy();
     expect(run(s, { type: 'host.removePlayer', playerId: 'nope' }, 1000).error).toBeTruthy();
   });
+
+  it('prototype-named ids are unknown teams and players, and change nothing (M3)', () => {
+    const s = room();
+    const before = clone(s);
+    for (const id of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+      expect(run(s, { type: 'addSelf', name: 'Mallory', teamId: id }, 1000).error).toBe('unknown team');
+      expect(run(s, { type: 'host.movePlayer', playerId: 'p01', teamId: id }, 1000).error).toBe('unknown team');
+      expect(run(s, { type: 'host.setGoesFirst', teamId: id }, 1000).error).toBe('unknown team');
+      expect(run(s, { type: 'host.movePlayer', playerId: id, teamId: 'pixel' }, 1000).error).toBe('unknown player');
+      expect(run(s, { type: 'host.removePlayer', playerId: id }, 1000).error).toBe('unknown player');
+      expect(run(s, { type: 'connect', playerId: id }, 1000).error).toBe('unknown player');
+      expect(run(s, { type: 'disconnect', playerId: id }, 1000).error).toBe('unknown player');
+    }
+    expect(s).toEqual(before);
+    expect(({} as Record<string, unknown>).total).toBeUndefined();
+  });
 });
 
 describe('game core: dispatcher, snapshot and persistence', () => {
