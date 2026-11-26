@@ -95,15 +95,40 @@ async function main() {
   }
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
+  const LICENCE_URLS: [RegExp, string][] = [
+    [/^CC0/, 'https://creativecommons.org/publicdomain/zero/1.0/'],
+    [/^CC-BY-SA 3/, 'https://creativecommons.org/licenses/by-sa/3.0/'],
+    [/^CC-BY-SA 4/, 'https://creativecommons.org/licenses/by-sa/4.0/'],
+    [/^CC-BY 3/, 'https://creativecommons.org/licenses/by/3.0/'],
+    [/^CC-BY 4/, 'https://creativecommons.org/licenses/by/4.0/'],
+    [/^GPL 3/, 'https://www.gnu.org/licenses/gpl-3.0.html'],
+    [/^OGA-BY 3/, 'https://opengameart.org/content/oga-by-30-faq'],
+  ];
+  const present = new Set<string>();
+  for (const f of manifest.files) for (const s of f.sources) for (const l of s.credit.licenses as string[]) present.add(l);
+  const licenceLinks = [...present].sort().map((l) => {
+    const hit = LICENCE_URLS.find(([re]) => re.test(l));
+    if (!hit) throw new Error(`no licence text URL known for "${l}"`);
+    return `[${l}](${hit[1]})`;
+  });
+
+  const how = (f: any) => {
+    const m: string[] = [];
+    if (f.sources.length > 1) m.push('merged from ' + f.sources.length + ' sheets (' + f.sources.map((x: any) => x.path.split('/').slice(0, -1).join('/')).join(' + ') + ')');
+    if (f.skinPalette) m.push(`skin recoloured to the "${f.skinPalette}" palette`);
+    if (f.recolor === 'grey') m.push('recoloured to a neutral grey ramp for runtime tinting');
+    return m.length ? 'MODIFIED: ' + m.join('; ') : 'unmodified';
+  };
+
   const seen = new Map<string, { authors: string[]; licenses: string[]; urls: string[]; files: string[] }>();
   for (const f of manifest.files) for (const s of f.sources) {
     const key = s.path.replace(/\/walk(\/[^/]+)?\.png$/, '');
     const e = seen.get(key) ?? { authors: s.credit.authors, licenses: s.credit.licenses, urls: s.credit.urls, files: [] as string[] };
-    e.files.push(f.file); seen.set(key, e);
+    e.files.push(`\`${f.file}\` (${how(f)})`); seen.set(key, e);
   }
-  let md = `# Credits\n\nCharacter art comes from the [Universal LPC Spritesheet Character Generator](${manifest.repo}) (commit \`${manifest.sha}\`), which bundles Liberated Pixel Cup assets by many artists. Only the walk animation is used. Some sheets are recoloured (skin tones, neutral grey for tinting) and the body and head are merged into one sheet per skin tone. These derivatives remain under the original licences (CC-BY-SA 3.0 / GPL 3.0 / OGA-BY 3.0 / CC0 as listed per asset).\n\nLicence texts: [CC-BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), [GPL 3.0](https://www.gnu.org/licenses/gpl-3.0.html), [OGA-BY 3.0](https://opengameart.org/content/oga-by-30-faq), [CC0](https://creativecommons.org/publicdomain/zero/1.0/).\n\n`;
+  let md = `# Credits\n\nCharacter art comes from the [Universal LPC Spritesheet Character Generator](${manifest.repo}) (commit \`${manifest.sha}\`), which bundles Liberated Pixel Cup assets by many artists. Only the walk animation is used. Some sheets are modified (recoloured, or merged into one sheet); each section below says which shipped files derive from it and how. Derivatives stay under the original licences listed per asset.\n\nLicence texts: ${licenceLinks.join(', ')}.\n\n`;
   for (const [path, e] of [...seen].sort()) {
-    md += `## ${path}\n\n- Authors: ${e.authors.join(', ')}\n- Licence: ${e.licenses.join(', ')}\n- Sources: ${e.urls.map((u) => `<${u}>`).join(', ')}\n- Repo path: \`spritesheets/${path}\`\n\n`;
+    md += `## ${path}\n\n- Authors: ${e.authors.join(', ')}\n- Licence: ${e.licenses.join(', ')}\n- Sources: ${e.urls.map((u) => `<${u}>`).join(', ')}\n- Repo path: \`spritesheets/${path}\`\n- Used in: ${e.files.join('; ')}\n\n`;
   }
   writeFileSync(resolve(root, 'CREDITS.md'), md);
   mkdirSync(resolve(root, 'public'), { recursive: true });

@@ -39,6 +39,8 @@ const css = `
 .ab-rand{background:#3a3a63}
 .ab-go{background:#ff7a3d;color:#1a1a2e}
 @media (max-height:780px){.ab-prev{width:120px;height:120px}.ab-prev canvas{width:104px;height:104px}.ab h1{font-size:16px;line-height:22px}.ab-label{font-size:12px}}
+@media (max-width:400px){.ab{padding-left:4px;padding-right:4px}.ab-label{padding-left:8px}}
+@media (max-height:700px){.ab h1{display:none}.ab-prev{width:96px;height:96px}.ab-prev canvas{width:84px;height:84px}.ab-label{font-size:11px;line-height:13px}.ab-row{gap:0}.ab-actions button{height:46px}}
 @media (max-height:660px){.ab h1{display:none}.ab-prev{width:84px;height:84px}.ab-prev canvas{width:72px;height:72px}.ab-actions button{height:46px}}
 `;
 function injectCss(): void {
@@ -77,7 +79,12 @@ function drawLook(ctx: CanvasRenderingContext2D, tmp: CanvasRenderingContext2D, 
   }
 }
 
-export function openAvatarBuilder(initial: AvatarLook | null, onDone: (look: AvatarLook) => void): void {
+export interface AvatarBuilderHandle { close(): void }
+let current: AvatarBuilderHandle | null = null;
+
+/** Opens the builder. Re-entrant: while one is open, returns the existing handle instead of stacking another. */
+export function openAvatarBuilder(initial: AvatarLook | null, onDone: (look: AvatarLook) => void): AvatarBuilderHandle {
+  if (current) return current;
   injectCss();
   loadImages();
   const look: AvatarLook = { ...(initial ?? randomLook(Math.random)) };
@@ -161,10 +168,19 @@ export function openAvatarBuilder(initial: AvatarLook | null, onDone: (look: Ava
     drawLook(ctx, tmp, look, frame);
   }, 110);
 
-  const close = () => { clearInterval(timer); root.remove(); };
-  go.onclick = () => { const result = { ...look }; close(); onDone(result); };
+  const handle: AvatarBuilderHandle = {
+    close() {
+      if (current !== handle) return;
+      current = null;
+      clearInterval(timer);
+      root.remove();
+    },
+  };
+  current = handle;
+  go.onclick = () => { const result = { ...look }; handle.close(); onDone(result); };
 
   changed();
   drawLook(ctx, tmp, look, frame);
   document.body.appendChild(root);
+  return handle;
 }
