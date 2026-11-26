@@ -38,8 +38,19 @@ export function persistable(state: GameState): Persisted {
   return structuredClone(rest);
 }
 
+/**
+ * Rebuilds a live state from a save. Icebreakers are dropped: every socket reconnects after a
+ * restart, and a stale card would lock its two players out with "Already in an icebreaker".
+ */
 export function restore(saved: Persisted, now: number): GameState {
-  return { ...structuredClone(saved), motions: {}, online: {}, lastTickAt: now };
+  const s: GameState = { ...structuredClone(saved), icebreakers: {}, motions: {}, online: {}, lastTickAt: now };
+  // Saves from before callTimes existed: exact times are lost, so the latest call keeps lastCallAt
+  // and earlier ones fall back to the competition start.
+  if (!Array.isArray(s.callTimes)) {
+    const start = s.competitionStartedAt ?? 0;
+    s.callTimes = s.departures.map((_, i) => (i === s.departures.length - 1 ? s.lastCallAt ?? start : start));
+  }
+  return s;
 }
 
 /** Table slot of a team (its index in teamOrder), or -1 if unknown. */

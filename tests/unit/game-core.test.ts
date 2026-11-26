@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   apply, createState, publicSnapshot, persistable, restore, slotOf, isPlayingTeam, activePlayers,
-  type Ctx, type Result,
+  type Ctx, type Result, type Persisted,
 } from '@shared/game/index';
 import type { Action } from '@shared/protocol';
 import type { AvatarLook, GameState } from '@shared/types';
@@ -385,6 +385,27 @@ describe('game core: dispatcher, snapshot and persistence', () => {
     // snapshot is a copy, not a live view
     snap.teams.pixel!.score = 999;
     expect(s.teams.pixel!.score).toBe(0);
+  });
+
+  it('restore clears icebreakers so nobody is stuck "Already in an icebreaker" after a restart', () => {
+    const s = room();
+    run(s, { type: 'host.startCompetition' }, 2000);
+    s.icebreakers['ib-0'] = { id: 'ib-0', a: 'p06', b: 'p11', prompt: 0, answeredBy: 'p06' };
+    s.promptCursor = 1;
+    const back = restore(JSON.parse(JSON.stringify(persistable(s))), 9000);
+    expect(back.icebreakers).toEqual({});
+    expect(back.promptCursor).toBe(1); // ids stay unique
+    expect(back.callTimes).toEqual([2000]);
+  });
+
+  it('restore of a save without callTimes rebuilds them from lastCallAt and competitionStartedAt', () => {
+    const s = room();
+    run(s, { type: 'host.startCompetition' }, 2000);
+    run(s, { type: 'host.callNext', expectedTeamId: 'pixel' }, 5000);
+    run(s, { type: 'host.callNext', expectedTeamId: 'comet' }, 8000);
+    const { callTimes: _c, ...old } = persistable(s);
+    const back = restore(old as Persisted, 9000);
+    expect(back.callTimes).toEqual([2000, 2000, 8000]);
   });
 
   it('persistable+restore round-trips everything except motions/online', () => {
