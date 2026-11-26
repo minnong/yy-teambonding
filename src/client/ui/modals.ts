@@ -44,6 +44,8 @@ export interface RiddleModalOpts {
   kind: 'riddle' | 'boss';
   get(): RiddleInfo | BossInfo | null;
   now(): number;
+  /** True while a submit/skip is in flight: both buttons stay disabled (re-read every tick). */
+  pending(): boolean;
   submit(text: string): void;
   skip(): void;
   onClose(): void;
@@ -109,12 +111,13 @@ export function openRiddleModal(hud: HTMLElement, o: RiddleModalOpts): RiddleMod
     q.textContent = r.q;
     form.hidden = false;
     const locked = isBoss ? null : skipLockText((r as RiddleInfo).lockedUntil, o.now());
-    submit.disabled = !!locked;
+    const busy = o.pending();
+    submit.disabled = !!locked || busy;
     lock.hidden = !locked;
     lock.textContent = locked ? `Skipped! This riddle unlocks in ${locked}` : '';
     if (skip) {
       skip.hidden = false;
-      skip.disabled = !!locked;
+      skip.disabled = !!locked || busy;
       skip.textContent = locked ? `Skip (${locked})` : 'Skip';
     }
   };

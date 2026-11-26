@@ -9,6 +9,8 @@ import type { Me } from './identity';
 import { startRoom } from './room/RoomScene';
 import { UiStore } from './ui/store';
 import { mountRoomUi } from './ui/hud';
+import type { RoomUi } from './ui/hud';
+import type { RoomApi } from './room/RoomScene';
 import type { PublicSnapshot } from '@shared/protocol';
 
 const app = document.querySelector<HTMLElement>('#app')!;
@@ -23,6 +25,14 @@ let overlay: HTMLElement | null = null;
 let entered = false;
 let building = false;
 let builder: { close(): void } | null = null;
+/** The live room and its HUD, kept so both can be torn down. */
+let room: { scene: RoomApi; ui: RoomUi } | null = null;
+
+function leaveRoom(): void {
+  room?.ui.destroy();
+  room?.scene.destroy();
+  room = null;
+}
 
 function mk<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -92,7 +102,7 @@ function showNameTaken(playerId: string): void {
 function forgetMe(): void {
   clearMe();
   me = null;
-  if (entered || building) location.reload();
+  if (entered || building) { leaveRoom(); location.reload(); }
   else showPicker();
 }
 
@@ -120,8 +130,8 @@ net.on('welcome', (m) => {
   if (entered || building) return; // a reconnect welcome: the room scene listens to the net itself
   const enter = (snap: PublicSnapshot) => {
     entered = true;
-    const room = startRoom(net, mine, snap);
-    mountRoomUi(net, mine, room, store, snap);
+    const scene = startRoom(net, mine, snap);
+    room = { scene, ui: mountRoomUi(net, mine, scene, store, snap) };
   };
   if (m.snapshot.players[mine.playerId]?.look) { enter(m.snapshot); return; }
   building = true;

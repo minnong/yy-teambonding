@@ -7,6 +7,32 @@ import type { PublicSnapshot } from '@shared/protocol';
 import type { PlayerId, TeamId } from '@shared/types';
 import type { BossInfo, QuizInfo, RiddleInfo } from './uiState';
 
+const ANSWERED_KEY = 'lobby.quizAnswered';
+const MAX_ANSWERED = 50;
+interface KV { getItem(k: string): string | null; setItem(k: string, v: string): void }
+
+/**
+ * Quiz keys (quizKey) I answered, mirrored to sessionStorage so a reload mid-quiz does not reopen
+ * an answered quiz. Storage can throw (private mode, disabled): memory still works.
+ */
+export class AnsweredQuizzes {
+  private readonly keys = new Set<string>();
+
+  constructor(private readonly storage: () => KV = () => sessionStorage) {
+    try {
+      const v: unknown = JSON.parse(this.storage().getItem(ANSWERED_KEY) ?? '[]');
+      if (Array.isArray(v)) for (const k of v) if (typeof k === 'string') this.keys.add(k);
+    } catch { /* missing, corrupt or unavailable: start empty */ }
+  }
+
+  has(key: string): boolean { return this.keys.has(key); }
+
+  add(key: string): void {
+    this.keys.add(key);
+    try { this.storage().setItem(ANSWERED_KEY, JSON.stringify([...this.keys].slice(-MAX_ANSWERED))); } catch { /* memory only */ }
+  }
+}
+
 export class UiStore {
   me: PlayerId | null = null;
   snap: PublicSnapshot | null = null;
@@ -14,8 +40,8 @@ export class UiStore {
   readonly bosses = new Map<TeamId, BossInfo>();
   /** The latest quiz seen (message or snapshot); kept after it closes so quizResult can name the answer. */
   quiz: QuizInfo | null = null;
-  /** endsAt of every quiz I answered on this page. */
-  readonly answered = new Set<number>();
+  /** Quizzes I answered (by quizKey), kept across reloads in this tab. */
+  readonly answered = new AnsweredQuizzes();
 
   constructor(net: Net) {
     net.on('welcome', (m) => { this.me = m.you; this.setSnap(m.snapshot); });

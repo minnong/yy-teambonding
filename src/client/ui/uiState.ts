@@ -80,11 +80,44 @@ export const quizSecondsLeft = (endsAt: number, now: number): number => Math.max
 export const quizCountdown = (endsAt: number, now: number): string => `${quizSecondsLeft(endsAt, now)}s`;
 export const quizExpired = (endsAt: number, now: number): boolean => now >= endsAt;
 
-/** The active quiz from a snapshot, if I am on a playing team and have not answered it (quizzes are keyed by endsAt). */
-export function quizToShow(s: PublicSnapshot, me: PlayerId, answered: ReadonlySet<number>, now: number): QuizInfo | null {
+/** Identifies one quiz run: its close time plus the question. */
+export const quizKey = (q: { endsAt: number; q: string }): string => `${q.endsAt}|${q.q}`;
+
+/** The active quiz from a snapshot, if I am on a playing team and have not answered it. */
+export function quizToShow(s: PublicSnapshot, me: PlayerId, answered: { has(key: string): boolean }, now: number): QuizInfo | null {
   const q = s.quizActive;
-  if (!q || !playing(s, teamOf(s, me)) || answered.has(q.endsAt) || quizExpired(q.endsAt, now)) return null;
+  if (!q || !playing(s, teamOf(s, me)) || answered.has(quizKey(q)) || quizExpired(q.endsAt, now)) return null;
   return q;
+}
+
+/**
+ * An open quiz modal (answered or not) stays only while my team plays, that same quiz is still
+ * active on the server, and it has not run out. Out messages precede the snapshot on the wire, so
+ * every snapshot after a `quiz` message already carries it in quizActive.
+ */
+export function quizStillOpen(s: PublicSnapshot, me: PlayerId, endsAt: number, now: number): boolean {
+  return playing(s, teamOf(s, me)) && s.quizActive?.endsAt === endsAt && !quizExpired(endsAt, now);
+}
+
+/** Safety timeout for a one-shot send whose reply never comes. */
+export const PENDING_MS = 3000;
+
+/**
+ * One-shot send guard: begin() succeeds once per key until the matching reply clears it, or
+ * PENDING_MS passes. Keeps a double tap or repeated Enter from sending the same intent twice.
+ */
+export class PendingGuard {
+  private readonly since = new Map<string, number>();
+  begin(key: string, now: number): boolean {
+    if (this.pending(key, now)) return false;
+    this.since.set(key, now);
+    return true;
+  }
+  pending(key: string, now: number): boolean {
+    const t = this.since.get(key);
+    return t !== undefined && now - t < PENDING_MS;
+  }
+  clear(key: string): void { this.since.delete(key); }
 }
 
 export function quizResultText(choices: readonly string[] | null, correct: number): string | null {

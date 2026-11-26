@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   bannerPlan, bossActive, canIcebreak, cardView, celebrateView, closedToast, leaderboardRows,
   quizCountdown, quizExpired, quizResultText, quizSecondsLeft, quizToShow, sheetTarget, skipLockText,
-  tableButton,
+  tableButton, quizKey,
 } from '../../src/client/ui/uiState';
 import type { BossInfo } from '../../src/client/ui/uiState';
 import type { IcebreakerCard, PublicSnapshot } from '@shared/protocol';
@@ -152,10 +152,10 @@ describe('quiz after reconnect', () => {
     expect(quizToShow(snap({ quizActive: active }), 'me', new Set(), 40_000)).toEqual(active);
   });
   it('does not show it once I answered it', () => {
-    expect(quizToShow(snap({ quizActive: active }), 'me', new Set([50_000]), 40_000)).toBeNull();
+    expect(quizToShow(snap({ quizActive: active }), 'me', new Set([quizKey(active)]), 40_000)).toBeNull();
   });
   it('a different (later) quiz still shows', () => {
-    expect(quizToShow(snap({ quizActive: { ...active, endsAt: 90_000 } }), 'me', new Set([50_000]), 80_000)).not.toBeNull();
+    expect(quizToShow(snap({ quizActive: { ...active, endsAt: 90_000 } }), 'me', new Set([quizKey(active)]), 80_000)).not.toBeNull();
   });
   it('not when expired, when there is none, or when my team is no longer playing', () => {
     expect(quizToShow(snap({ quizActive: active }), 'me', new Set(), 50_000)).toBeNull();

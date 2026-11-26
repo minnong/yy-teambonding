@@ -19,14 +19,15 @@ import {
   type Announce, type LeaderboardModal, type QuizModal, type RiddleModal,
 } from './modals';
 import {
-  EMOTE_EMOJI, PAUSED_TEXT, WRONG_TEXT, canIcebreak, cardView, celebrateView, closedToast,
-  quizResultText, quizToShow, sheetTarget, tableButton, teamOf,
+  EMOTE_EMOJI, PAUSED_TEXT, PENDING_MS, PendingGuard, WRONG_TEXT, canIcebreak, cardView, celebrateView,
+  closedToast, quizKey, quizResultText, quizStillOpen, quizToShow, sheetTarget, tableButton, teamOf,
 } from './uiState';
 
 const EMOTE_LABEL: Record<string, string> = { wave: 'Wave', highfive: 'High-five', laugh: 'Laugh', heart: 'Heart' };
 /** Client-side spam guard for emote taps (message budget). */
 const EMOTE_COOLDOWN_MS = 900;
-const PENDING_MS = 2500;
+/** Guard keys: one in-flight send each, cleared by the matching reply (or any error), else after PENDING_MS. */
+const CARD = 'card', RIDDLE = 'riddle', START_IB = 'icebreakerStart';
 const QUIET_ERRORS = new Set(['unknown player']);
 
 export interface RoomUi { destroy(): void }
@@ -40,6 +41,8 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
   let card: IcebreakerCard | null = null;
   let nearOwn = false;
   const banners = createBanners(hud);
+  const guard = new PendingGuard();
+  const wallNow = () => performance.now();
 
   const nameOf = (id: PlayerId) => snap.players[id]?.name ?? 'Someone';
   const unsubs: (() => void)[] = [];
@@ -78,8 +81,17 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
       kind,
       get: () => (kind === 'boss' ? store.boss() : store.riddle()),
       now: () => net.serverNow(),
-      submit: (text) => { net.act(kind === 'boss' ? { type: 'bossAnswer', text } : { type: 'riddleAnswer', text }); },
-      skip: () => { net.act({ type: 'riddleSkip' }); },
+      pending: () => guard.pending(RIDDLE, wallNow()),
+      submit: (text) => {
+        if (!guard.begin(RIDDLE, wallNow())) return;
+        net.act(kind === 'boss' ? { type: 'bossAnswer', text } : { type: 'riddleAnswer', text });
+        riddle?.update();
+      },
+      skip: () => {
+        if (!guard.begin(RIDDLE, wallNow())) return;
+        net.act({ type: 'riddleSkip' });
+        riddle?.update();
+      },
       onClose: () => { riddle = null; },
     });
   });
@@ -104,7 +116,6 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
   let pinned: PlayerId | null = null;
   let expanded = false;
   let emoteAt = 0;
-  let pendingIb = 0;
 
   const chip = button('lb-chip', '', () => { expanded = true; pinned = sheetTarget(near, pinned); renderSheet(); });
   const head = el('div', 'lb-sheet-head');
@@ -125,9 +136,7 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
   }
   const ibBtn = button('lb-primary lb-ib-btn', '🧊 Icebreaker', () => {
     const target = sheetTarget(near, pinned);
-    const now = performance.now();
-    if (!target || now - pendingIb < PENDING_MS) return;
-    pendingIb = now;
+    if (!target || !guard.begin(START_IB, wallNow())) return;
     net.act({ type: 'icebreakerStart', target });
   });
   const body = el('div', 'lb-sheet-body');
@@ -164,11 +173,22 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
     hud.classList.toggle('lb-card-open', !!v);
     if (!v) { renderSheet(); return; }
     const id = v.id;
+    // One send per card step: the buttons stay disabled until the next `icebreaker` (or an error),
+    // with a re-render after the safety timeout in case no reply comes.
+    const busy = guard.pending(CARD, wallNow());
+    const send = (a: Parameters<Net['act']>[0]) => {
+      if (!guard.begin(CARD, wallNow())) return;
+      net.act(a);
+      renderCard();
+      setTimeout(renderCard, PENDING_MS + 50); // display only
+    };
     const actions = el('div', 'lb-card-actions');
-    if (v.mode === 'answer') actions.appendChild(button('lb-primary', 'We answered it!', () => { net.act({ type: 'icebreakerAnswered', id }); }));
-    else if (v.mode === 'confirm') actions.appendChild(button('lb-primary', 'Confirm', () => { net.act({ type: 'icebreakerConfirm', id }); }));
+    const btns: HTMLButtonElement[] = [];
+    if (v.mode === 'answer') btns.push(button('lb-primary', 'We answered it!', () => send({ type: 'icebreakerAnswered', id })));
+    else if (v.mode === 'confirm') btns.push(button('lb-primary', 'Confirm', () => send({ type: 'icebreakerConfirm', id })));
     else actions.appendChild(el('p', 'lb-waiting', v.waitingText));
-    actions.appendChild(button('lb-secondary', 'Cancel', () => { net.act({ type: 'icebreakerCancel', id }); }));
+    btns.push(button('lb-secondary', 'Cancel', () => send({ type: 'icebreakerCancel', id })));
+    for (const b of btns) { b.disabled = busy; actions.appendChild(b); }
     const sub = v.mode === 'confirm' ? `${v.otherName} says you answered it. Confirm?` : 'Both of you answer, out loud:';
     cardEl.replaceChildren(
       el('div', 'lb-card-title', `🧊 Icebreaker with ${v.otherName}`),
@@ -187,7 +207,7 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
     quiz?.close();
     quiz = openQuizModal(hud, q, {
       now: () => net.serverNow(),
-      answer: (choice) => { store.answered.add(q.endsAt); net.act({ type: 'quizAnswer', choice }); },
+      answer: (choice) => { store.answered.add(quizKey(q)); net.act({ type: 'quizAnswer', choice }); },
       onClose: () => { quiz = null; },
     });
   };
@@ -213,6 +233,8 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
     renderTable();
     renderSheet();
     board?.update(s);
+    // My team left, or the quiz ended or changed: an open quiz modal goes (answered or not).
+    if (quiz && !quizStillOpen(s, myId, quiz.endsAt, net.serverNow())) quiz.close();
     maybeQuizFromSnap();
   };
 
@@ -239,13 +261,17 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
     applySnap(m.snapshot);
   });
   on('error', (m) => {
-    pendingIb = 0;
+    // Errors are not tied to a request: free every pending send so the player can retry.
+    guard.clear(CARD); guard.clear(RIDDLE); guard.clear(START_IB);
+    riddle?.update();
+    if (cardEl.hidden === false) renderCard();
     if (QUIET_ERRORS.has(m.message)) return;
     if (riddle && m.message === WRONG_TEXT) { riddle.wrong(); return; }
     banners.toast(m.message);
   });
   on('icebreaker', (m) => {
-    pendingIb = 0;
+    guard.clear(CARD);
+    guard.clear(START_IB);
     if (m.card) {
       if (m.card.a !== myId && m.card.b !== myId) return;
       card = m.card;
@@ -259,10 +285,11 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
     }
     renderCard();
   });
-  on('riddle', () => { riddle?.update(); renderTable(); });
-  on('boss', () => { riddle?.update(); renderTable(); });
+  on('riddle', () => { guard.clear(RIDDLE); riddle?.update(); renderTable(); });
+  on('boss', () => { guard.clear(RIDDLE); riddle?.update(); renderTable(); });
   on('quiz', (m) => {
     if (snap.teams[teamOf(snap, myId) ?? '']?.status !== 'playing') return;
+    if (store.answered.has(quizKey(m))) return; // same rule as the snapshot path
     openQuiz({ q: m.q, choices: m.choices, endsAt: m.endsAt });
   });
   on('quizResult', (m) => {
