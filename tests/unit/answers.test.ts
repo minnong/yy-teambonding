@@ -21,6 +21,15 @@ describe('answers', () => {
     expect(matchesAnswer('piano the', ['piano'])).toBe(false);
   });
 
+  it('hyphens, slashes and underscores count as spaces', () => {
+    expect(matchesAnswer('ice-cream', ['ice cream'])).toBe(true);
+    expect(matchesAnswer('ice cream', ['ice-cream'])).toBe(true);
+    expect(matchesAnswer('foot/steps', ['foot steps'])).toBe(true);
+    expect(matchesAnswer('foot_steps', ['foot steps'])).toBe(true);
+    expect(matchesAnswer('the-piano', ['piano'])).toBe(true);
+    expect(matchesAnswer('ice-cream', ['icecream'])).toBe(false);
+  });
+
   it('empty input never matches', () => {
     expect(matchesAnswer('   ', [''])).toBe(false);
     expect(matchesAnswer('!!', ['piano'])).toBe(false);

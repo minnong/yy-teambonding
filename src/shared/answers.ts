@@ -1,11 +1,12 @@
 // Free-text answer matching for riddles and the boss.
 
 /**
- * Lowercase, strip accents and punctuation, collapse whitespace, trim, and drop one leading
- * "a " / "an " / "the ".
+ * Lowercase, strip accents, turn - / _ into spaces, strip other punctuation, collapse
+ * whitespace, trim, and drop one leading "a " / "an " / "the ".
  */
 export function normalizeAnswer(s: string): string {
   return s.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase()
+    .replace(/[-/_]/g, ' ')
     .replace(/[^\p{L}\p{N}\s]/gu, '')
     .replace(/\s+/g, ' ').trim()
     .replace(/^(?:a|an|the) /, '');
