@@ -586,6 +586,20 @@ describe('scoring: quiz', () => {
     expect(res.perTeam.comet).toBe(25);
   });
 
+  it('quiz numerator counts only players still online at close: 2 correct of 5, one leaves → 1 of 4 → 13', () => {
+    const s = competing();
+    run(s, { type: 'host.quizStart' }, 2000);
+    const c = Q(s).correct;
+    run(s, { type: 'quizAnswer', playerId: 'p11', choice: c }, 3000);
+    run(s, { type: 'quizAnswer', playerId: 'p12', choice: c }, 3000);
+    run(s, { type: 'disconnect', playerId: 'p12' }, 4000); // a correct answerer leaves
+    const r = run(s, { type: 'tick' }, 22000);
+    expect(s.teams.comet!.score).toBe(Math.round((POINTS.quizMax * 1) / 4));
+    expect(s.teams.comet!.score).toBe(13);
+    const res = r.out.find((o) => o.msg.type === 'quizResult')!.msg as { perTeam: Record<string, number> };
+    expect(res.perTeam.comet).toBe(13);
+  });
+
   it('quiz does not close while paused; resume extends it', () => {
     const s = competing();
     run(s, { type: 'host.quizStart' }, 2000);

@@ -200,11 +200,10 @@ function closeQuiz(state: GameState, ctx: Ctx): Outbound[] {
   const out: Outbound[] = [];
   for (const teamId of state.teamOrder) {
     if (!isPlayingTeam(state, teamId)) continue;
-    const right = Object.entries(quiz.answers).filter(([id, choice]) => {
-      const p = state.players[id];
-      return p && !p.removed && p.teamId === teamId && choice === correct;
-    }).length;
-    const denom = Math.max(1, activePlayers(state, teamId).length);
+    // Numerator and denominator are the same group: the team's active players at close.
+    const active = activePlayers(state, teamId);
+    const right = active.filter((id) => Object.hasOwn(quiz.answers, id) && quiz.answers[id] === correct).length;
+    const denom = Math.max(1, active.length);
     const pts = Math.min(POINTS.quizMax, Math.round((POINTS.quizMax * right) / denom));
     perTeam[teamId] = pts;
     if (pts > 0) out.push(...addPoints(state, teamId, pts, 'quiz', ctx.now));
