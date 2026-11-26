@@ -11,9 +11,11 @@ import { callsHandlers } from './calls';
 export type { Ctx, To, Outbound, Result, Handler, HandlerMap } from './result';
 export { ok, err, ignored } from './result';
 export { addPoints, onTeamDeparted } from './scoring';
-export { nextLeader, ordinal, departTeam } from './calls';
+export { nextLeader, ordinal, departTeam, bossTeam } from './calls';
+export { catchUp } from './catchup';
+export { riddleState } from './scoring';
 export {
-  createState, persistable, restore, slotOf, isPlayingTeam, activePlayers, type Persisted,
+  createState, persistable, restore, slotOf, isPlayingTeam, activePlayers, utcDay, type Persisted,
 } from './state';
 
 /** Total over every Action type: the compiler flags any action without a handler. */

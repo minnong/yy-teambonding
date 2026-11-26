@@ -1,5 +1,6 @@
 // Calling teams out (host.callNext), undoing a call, and the final boss for the last team standing.
 import type { GameState, TeamId } from '../types';
+import type { ServerMsg } from '../protocol';
 import { nearTable } from '../layout';
 import { positionAt, truncateAt } from '../motion';
 import { matchesAnswer } from '../answers';
@@ -59,15 +60,22 @@ export function departTeam(state: GameState, teamId: TeamId, now: number): Outbo
   return out;
 }
 
-/** The boss message for a team at its current step (q is null once done). */
-function bossMsg(state: GameState, teamId: TeamId, ctx: Ctx, active = true): Outbound {
+/**
+ * A team's boss state at its current step: q is null once done or when the boss is not active for
+ * it; the intro rides along with an active step 0.
+ */
+export function bossState(state: GameState, teamId: TeamId, ctx: Ctx, active = true): ServerMsg {
   const t = state.teams[teamId]!;
   const q = active && !t.bossDone ? ctx.content.boss.steps[t.bossIndex]?.q ?? null : null;
-  return { to: { team: teamId }, msg: { type: 'boss', index: t.bossIndex, q, done: t.bossDone } };
+  const msg: ServerMsg = { type: 'boss', index: t.bossIndex, q, done: t.bossDone };
+  return q !== null && t.bossIndex === 0 ? { ...msg, intro: ctx.content.boss.intro } : msg;
 }
 
+const bossMsg = (state: GameState, teamId: TeamId, ctx: Ctx, active = true): Outbound =>
+  ({ to: { team: teamId }, msg: bossState(state, teamId, ctx, active) });
+
 /** The sole playing team during the competition (the boss is on), else null. */
-function bossTeam(state: GameState): TeamId | null {
+export function bossTeam(state: GameState): TeamId | null {
   const left = playingTeams(state);
   return state.phase === 'competition' && left.length === 1 ? left[0]! : null;
 }
@@ -80,17 +88,18 @@ const callNext: Handler<'host.callNext'> = (state, a, ctx) => {
   const out = departTeam(state, leader, ctx.now);
   state.lastCallAt = ctx.now;
   const last = bossTeam(state);
-  if (last) out.push({ to: 'all', msg: { type: 'banner', text: FINAL_BOSS_BANNER } }, bossMsg(state, last, ctx));
+  // A team that already escaped (then got company back through an undo) does not face it again.
+  if (last && !state.teams[last]!.bossDone) out.push({ to: 'all', msg: { type: 'banner', text: FINAL_BOSS_BANNER } }, bossMsg(state, last, ctx));
   return ok(out, { persist: true, snapshot: true });
 };
 
 /**
  * Reverts the latest call, never the goesFirst departure. The team plays (and scores) again with
- * its score untouched; boss progress (bossIndex/bossDone) is kept for whoever had it.
+ * its score untouched; boss progress (bossIndex/bossDone) is kept for whoever had it. Allowed
+ * while paused: the host may pause straight after a mis-call.
  */
 const undoCall: Handler<'host.undoCall'> = (state, _a, ctx) => {
   if (state.phase !== 'competition') return err(NOT_COMPETING);
-  if (state.paused) return err(PAUSED);
   const id = state.departures.at(-1);
   const t = id === undefined ? undefined : state.teams[id];
   if (!t || t.goesFirst || state.departures.length <= 1) return err('Nothing to undo');

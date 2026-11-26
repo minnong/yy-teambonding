@@ -4,7 +4,8 @@ import type { IcebreakerClosedReason } from '../protocol';
 import { spawnFor } from '../layout';
 import type { Outbound } from './result';
 
-const utcDay = (now: number) => new Date(now).toISOString().slice(0, 10);
+/** The UTC calendar day (YYYY-MM-DD) msgCount is bucketed by. */
+export const utcDay = (now: number) => new Date(now).toISOString().slice(0, 10);
 
 export function createState(content: Content, now: number): GameState {
   const teams: GameState['teams'] = {};

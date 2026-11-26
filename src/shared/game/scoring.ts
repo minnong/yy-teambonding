@@ -1,6 +1,6 @@
 // Scoring activities: icebreakers, collectibles, riddles, the quiz, host score adjustment and tick.
 import type { GameState, Icebreaker, PlayerId, TeamId } from '../types';
-import type { IcebreakerCard } from '../protocol';
+import type { IcebreakerCard, ServerMsg } from '../protocol';
 import {
   COLLECTIBLE_MAX_MS, COLLECTIBLE_MIN_MS, MAX_COLLECTIBLES, POINTS, PROXIMITY, QUIZ_MS,
   RIDDLE_SKIP_LOCK_MS, TILE,
@@ -136,13 +136,14 @@ function riddleTeam(state: GameState, playerId: PlayerId, ctx: Ctx): TeamId | { 
   return p.teamId;
 }
 
-function riddleMsg(state: GameState, teamId: TeamId, ctx: Ctx): Outbound {
+/** A team's current riddle (q is null once the pool is exhausted). */
+export function riddleState(state: GameState, teamId: TeamId, ctx: Ctx): ServerMsg {
   const t = state.teams[teamId]!;
-  return {
-    to: { team: teamId },
-    msg: { type: 'riddle', index: t.riddleIndex, q: ctx.content.riddles[t.riddleIndex]?.q ?? null, lockedUntil: t.riddleLockedUntil },
-  };
+  return { type: 'riddle', index: t.riddleIndex, q: ctx.content.riddles[t.riddleIndex]?.q ?? null, lockedUntil: t.riddleLockedUntil };
 }
+
+const riddleMsg = (state: GameState, teamId: TeamId, ctx: Ctx): Outbound =>
+  ({ to: { team: teamId }, msg: riddleState(state, teamId, ctx) });
 
 const riddleAnswer: Handler<'riddleAnswer'> = (state, a, ctx) => {
   const teamId = riddleTeam(state, a.playerId, ctx);

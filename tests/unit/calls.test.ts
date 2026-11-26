@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { apply, addPoints, createState, type Ctx, type Result } from '@shared/game/index';
 import { nextLeader, ordinal } from '@shared/game/calls';
+import { catchUp } from '@shared/game/catchup';
 import type { Action } from '@shared/protocol';
 import type { GameState, Vec } from '@shared/types';
 import { loadContent } from '@shared/content';
@@ -210,16 +211,23 @@ describe('calls: host.undoCall', () => {
     expect(s.teams.otter!.status).toBe('departed');
     expect(s.teams.otter!.departedOrder).toBe(1);
 
-    // warm-up and paused refuse
+    // warm-up refuses
     const w = room();
     const wb = clone(w);
     expect(run(w, { type: 'host.undoCall' }, 2000).error).toBeTruthy();
     expect(w).toEqual(wb);
+  });
+
+  it('undo works while paused (the host may pause on a mis-call)', () => {
+    const s = competing(1000);
+    s.teams.koala!.score = 50;
     run(s, { type: 'host.callNext', expectedTeamId: 'koala' }, 340000);
     run(s, { type: 'host.pause' }, 341000);
-    const paused = clone(s);
-    expect(run(s, { type: 'host.undoCall' }, 342000).error).toBe('Paused');
-    expect(s).toEqual(paused);
+    const r = run(s, { type: 'host.undoCall' }, 342000);
+    expect(r.error).toBeUndefined();
+    expect(s.teams.koala!.status).toBe('playing');
+    expect(s.departures).toEqual(['otter']);
+    expect(s.paused).toBe(true);
   });
 
   it('undo resets lastCallAt to previous call', () => {
@@ -263,8 +271,31 @@ describe('calls: final boss', () => {
     ]);
     expect(r.out).toContainEqual({ to: 'all', msg: { type: 'banner', text: 'FINAL BOSS: escape the lobby!' } });
     expect(bossMsgs(r)).toEqual([
-      { to: { team: 'maple' }, msg: { type: 'boss', index: 0, q: STEPS[0]!.q, done: false } },
+      { to: { team: 'maple' }, msg: { type: 'boss', index: 0, q: STEPS[0]!.q, done: false, intro: content.boss.intro } },
     ]);
+  });
+
+  it('undoing the final call before any boss answer re-sends step 0 with the intro', () => {
+    const s = onlyMapleLeft(1000);
+    expect(callNext(s, 21000).error).toBeUndefined();
+    const u = run(s, { type: 'host.undoCall' }, 22000);
+    expect(bossMsgs(u)).toEqual([
+      { to: { team: 'maple' }, msg: { type: 'boss', index: 0, q: STEPS[0]!.q, done: false, intro: content.boss.intro } },
+    ]);
+  });
+
+  it('a call that leaves a team that already escaped skips the FINAL BOSS banner and step', () => {
+    const s = onlyMapleLeft(1000);
+    place(s, 'p31', spawnFor(6, 0));
+    STEPS.forEach((st, i) => run(s, { type: 'bossAnswer', playerId: 'p31', text: st.answers[0]! }, 20000 + i));
+    expect(s.teams.maple!.bossDone).toBe(true);
+    expect(run(s, { type: 'host.undoCall' }, 30000).error).toBeUndefined(); // nova back
+    expect(playing(s)).toEqual(['nova', 'maple']);
+    const r = run(s, { type: 'host.callNext', expectedTeamId: 'nova' }, 31000);
+    expect(r.error).toBeUndefined();
+    expect(playing(s)).toEqual(['maple']);
+    expect(banners(r)).toEqual([{ type: 'banner', text: "🎉 Team Nova, you're up! Head to the next activity." }]);
+    expect(bossMsgs(r)).toEqual([]);
   });
 
   it('boss chain completes with celebrate', () => {
@@ -373,5 +404,37 @@ describe('calls: final boss', () => {
     expect(bossMsgs(r)).toEqual([{ to: { team: 'maple' }, msg: { type: 'boss', index: 2, q: STEPS[2]!.q, done: false } }]);
     expect(run(s, { type: 'bossAnswer', playerId: 'p31', text: STEPS[2]!.answers[0]! }, 22100).error).toBeUndefined();
     expect(s.teams.maple!.bossIndex).toBe(3);
+  });
+});
+
+describe('catchUp: what a (re)joining player needs beyond the snapshot', () => {
+  const riddle = (s: GameState, team: string) => {
+    const t = s.teams[team]!;
+    return { type: 'riddle', index: t.riddleIndex, q: content.riddles[t.riddleIndex]?.q ?? null, lockedUntil: t.riddleLockedUntil };
+  };
+
+  it('nothing in warm-up, nothing for a departed team, the team riddle while playing', () => {
+    expect(catchUp(room(), 'p06', ctx(2000))).toEqual([]);
+    const s = competing(1000);
+    expect(catchUp(s, 'p01', ctx(2000))).toEqual([]); // otter went first
+    place(s, 'p06', spawnFor(1, 0));
+    run(s, { type: 'riddleSkip', playerId: 'p06' }, 3000);
+    expect(catchUp(s, 'p06', ctx(4000))).toEqual([riddle(s, 'pixel')]);
+    expect(catchUp(s, 'p06', ctx(4000))[0]).toMatchObject({ index: 1, lockedUntil: 33000 });
+    expect(catchUp(s, 'nobody', ctx(4000))).toEqual([]);
+  });
+
+  it('the sole playing team also gets its boss step, with the intro only at step 0 and nothing once done', () => {
+    const s = onlyMapleLeft(1000);
+    expect(catchUp(s, 'p31', ctx(20000))).toEqual([
+      riddle(s, 'maple'),
+      { type: 'boss', index: 0, q: STEPS[0]!.q, done: false, intro: content.boss.intro },
+    ]);
+    place(s, 'p31', spawnFor(6, 0));
+    run(s, { type: 'bossAnswer', playerId: 'p31', text: STEPS[0]!.answers[0]! }, 20000);
+    expect(catchUp(s, 'p31', ctx(21000))[1]).toEqual({ type: 'boss', index: 1, q: STEPS[1]!.q, done: false });
+    STEPS.slice(1).forEach((st, i) => run(s, { type: 'bossAnswer', playerId: 'p31', text: st.answers[0]! }, 22000 + i));
+    expect(s.teams.maple!.bossDone).toBe(true);
+    expect(catchUp(s, 'p31', ctx(30000))).toEqual([riddle(s, 'maple')]);
   });
 });
