@@ -102,6 +102,12 @@ async function start(h: Client) {
   return h.next('hostState', (m) => m.snapshot.phase === 'competition');
 }
 
+/** Barrier for any socket (host or pre-hello too): an invalid frame is answered with an error. */
+async function barrier(c: Client) {
+  c.send('{');
+  await c.next('error', (m) => m.message === 'bad message');
+}
+
 /** Waits until `c` has processed everything sent before: emotes are echoed to the sender. */
 async function sync(c: Client) {
   act(c, { type: 'emote', kind: 'wave' });
@@ -152,6 +158,7 @@ describe('room: hello and sessions', () => {
     const b = await connect(stub);
     b.send({ t: 'hello', playerId: 'p01', token: 'device-b-token' });
     expect(await b.next('nameTaken')).toEqual({ type: 'nameTaken', playerId: 'p01' });
+    await sync(a);
     expect(a.all('kicked')).toEqual([]);
 
     b.send({ t: 'hello', playerId: 'p01', token: 'device-b-token', takeover: true });
@@ -303,6 +310,7 @@ describe('room: routing', () => {
     expect(await p06.next('riddle')).toEqual(r);
     await sync(p11);
     expect(p11.all('riddle').map((m) => m.index)).toEqual([0]);
+    await barrier(h);
     expect(h.all('riddle')).toEqual([]);
   });
 
@@ -423,12 +431,19 @@ describe('room: persistence, alarm and counters', () => {
     expect(hs.lastCallAt).toBe(saved?.lastCallAt);
   });
 
-  it('players stay online when the object wakes from hibernation', async () => {
+  it('players stay online and keep their position when the object wakes from hibernation', async () => {
     const stub = freshRoom();
     const p = await player(stub, 'p06');
+    const q = await player(stub, 'p11');
+    const spawn11 = q.all('welcome')[0]!.snapshot.motions.p11!.path[0];
+    act(p, { type: 'move', to: { x: 10 * 32 + 16, y: 12 * 32 + 16 } });
+    const end = (await p.next('motion')).motion.path.at(-1)!;
     await evictDurableObject(stub); // hibernates sockets: they stay connected with their attachments
     const [, hs] = await host(stub); // wakes it: the constructor runs again
     expect(hs.snapshot.online.p06).toBe(true);
+    // a moved player stands where their last motion ends, not back at the table
+    expect(hs.snapshot.motions.p06?.path).toEqual([end]);
+    expect(hs.snapshot.motions.p11?.path).toEqual([spawn11]);
     expect(hs.connectedPerTeam.pixel).toEqual({ online: 1, total: 5 });
     // the hibernated socket still acts as p06
     await sync(p);
@@ -445,6 +460,36 @@ describe('room: persistence, alarm and counters', () => {
     expect(hs.snapshot.collectibles).toHaveLength(1);
     expect(await alarmOf(stub)).not.toBeNull();
     expect((await stored(stub))?.collectibles).toHaveLength(1);
+  });
+
+  it('the alarm stops once the last team has beaten the boss', async () => {
+    const stub = freshRoom();
+    const [h] = await host(stub);
+    await start(h);
+    for (const [i, id] of ['pixel', 'comet', 'mango', 'koala', 'nova'].entries()) {
+      hostDo(h, { type: 'host.callNext', expectedTeamId: id });
+      await h.next('hostState', (m) => m.snapshot.departures.length === i + 2);
+    }
+    const p31 = await player(stub, 'p31'); // maple, standing at its table
+    for (const st of content.boss.steps) act(p31, { type: 'bossAnswer', text: st.answers[0]! });
+    await p31.next('celebrate');
+    await runDurableObjectAlarm(stub); // whatever tick was pending runs, and does not re-arm
+    expect(await alarmOf(stub)).toBeNull();
+    // a quiz still ticks (it must close)
+    hostDo(h, { type: 'host.quizStart' });
+    await h.next('hostState', (m) => m.snapshot.quizActive !== null);
+    expect(await alarmOf(stub)).not.toBeNull();
+  });
+
+  it('a host reconnecting re-arms the alarm', async () => {
+    const stub = freshRoom();
+    const [h] = await host(stub);
+    await start(h);
+    hostDo(h, { type: 'host.quizStart' });
+    await h.next('hostState', (m) => m.snapshot.quizActive !== null);
+    await runInDurableObject(stub, (_i, state) => state.storage.deleteAlarm()); // as if ticks had stopped
+    await host(stub);
+    expect(await alarmOf(stub)).not.toBeNull();
   });
 
   it('msgCount increments per incoming message', async () => {

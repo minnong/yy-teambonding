@@ -1,11 +1,15 @@
 // Who each socket is, and who a message is for. Identity lives only in socket attachments, which
 // survive hibernation, so routing is rebuilt from ctx.getWebSockets() every time and never from
 // in-memory maps.
-import type { GameState, PlayerId } from '../shared/types';
+import type { GameState, PlayerId, Vec } from '../shared/types';
 import type { To } from '../shared/game/index';
 import { isOpen } from './wire';
 
-export type Attachment = { kind: 'player'; playerId: PlayerId; token: string } | { kind: 'host' };
+/**
+ * `pos` is where the player's latest motion ends. It is not storage: it rides on the socket so
+ * a hibernation wake-up can put the player back there instead of at their table.
+ */
+export type Attachment = { kind: 'player'; playerId: PlayerId; token: string; pos?: Vec } | { kind: 'host' };
 export interface Sock { ws: WebSocket; att: Attachment | null }
 export type PlayerSock = Sock & { att: Extract<Attachment, { kind: 'player' }> };
 

@@ -2,7 +2,7 @@
 // and message fan-out around the pure reducer in src/shared/game.
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from './worker';
-import type { GameState, PlayerId, TeamId } from '../shared/types';
+import type { GameState, PlayerId, TeamId, Vec } from '../shared/types';
 import type { Action, ServerMsg } from '../shared/protocol';
 import { TICK_MS } from '../shared/constants';
 import { loadContent } from '../shared/content';
@@ -37,6 +37,9 @@ function fresherCount(a: MsgCount, b: MsgCount | undefined): MsgCount {
   if (a.day !== b.day) return a.day > b.day ? a : b;
   return a.count >= b.count ? a : b;
 }
+
+const validPos = (p: Vec | undefined): p is Vec =>
+  !!p && Number.isFinite(p.x) && Number.isFinite(p.y);
 
 function pinMatches(given: string, expected: string | undefined): boolean {
   if (!expected || given.length !== expected.length) return false;
@@ -79,6 +82,8 @@ export class Room extends DurableObject<Env> {
     let reconnected = false;
     for (const s of listSockets(this.ctx)) {
       if (!isPlayerSock(s)) continue;
+      const pos = s.att.pos, id = s.att.playerId;
+      if (validPos(pos) && !this.game.motions[id]) this.game.motions[id] = { path: [{ x: pos.x, y: pos.y }], startedAt: now };
       if (apply(this.game, { type: 'connect', playerId: s.att.playerId }, this.ctxAt(now)).error) {
         close(s.ws, CLOSE.removed, 'removed');
       } else reconnected = true;
@@ -148,6 +153,7 @@ export class Room extends DurableObject<Env> {
         if (!pinMatches(msg.pin, this.env.HOST_PIN)) { close(ws, CLOSE.badPin, 'bad pin'); return; }
         ws.serializeAttachment({ kind: 'host' });
         send(ws, this.hostState(now));
+        await this.ensureAlarm(); // e.g. everyone dropped mid-quiz: the quiz must still close
         return;
       case 'act':
         if (!att) { sendError(ws, 'say hello first'); return; }
@@ -234,9 +240,24 @@ export class Room extends DurableObject<Env> {
    */
   private async commit(r: Result, sender: WebSocket | null, now: number, except: WebSocket | null = null): Promise<void> {
     if (r.error) { if (sender) sendError(sender, r.error); return; }
+    // Start the write before any frame goes out (the output gate then holds them until it is durable).
+    const written = r.persist ? this.persist() : undefined;
     this.route(r.out);
     if (r.snapshot) this.broadcastSnapshot(now, except);
-    if (r.persist) await this.persist();
+    // A snapshot-worthy change may have moved anyone (pause, departures, connect); motion messages move one.
+    const moved = r.out.flatMap((o) => (o.msg.type === 'motion' ? [o.msg.playerId] : []));
+    if (r.snapshot || moved.length > 0) this.rememberPositions(r.snapshot ? null : new Set(moved));
+    await written;
+  }
+
+  /** Copies where each player's motion ends into their socket attachments (only when it changed). */
+  private rememberPositions(only: Set<PlayerId> | null): void {
+    for (const s of listSockets(this.ctx)) {
+      if (!isPlayerSock(s) || (only && !only.has(s.att.playerId))) continue;
+      const end = this.game.motions[s.att.playerId]?.path.at(-1);
+      if (!end || (s.att.pos?.x === end.x && s.att.pos?.y === end.y)) continue;
+      try { s.ws.serializeAttachment({ ...s.att, pos: { x: end.x, y: end.y } }); } catch { /* socket gone */ }
+    }
   }
 
   private route(out: Outbound[]): void {
@@ -287,14 +308,16 @@ export class Room extends DurableObject<Env> {
   }
 
   /**
-   * Tick while there is something to tick for: the competition with a team still playing (or a
-   * quiz running), and at least one socket attached. Alarms count against the daily request
+   * Tick while there is something to tick for: the competition with a team still playing that
+   * has not beaten the boss (or a quiz running), and at least one socket attached. Alarms count against the daily request
    * limit, so a room left in competition overnight must not tick forever; the next hello re-arms.
    */
   private shouldTick(): boolean {
     const g = this.game;
-    const live = g.quiz !== null || g.teamOrder.some((id) => isPlayingTeam(g, id));
-    return g.phase === 'competition' && live && this.ctx.getWebSockets().length > 0;
+    const playing = g.teamOrder.filter((id) => isPlayingTeam(g, id));
+    // Over once nobody is playing, or the last team standing has beaten the boss (Ruling R21).
+    const over = playing.length === 0 || (playing.length === 1 && g.teams[playing[0]!]!.bossDone);
+    return g.phase === 'competition' && (g.quiz !== null || !over) && this.ctx.getWebSockets().length > 0;
   }
 
   private async ensureAlarm(): Promise<void> {
