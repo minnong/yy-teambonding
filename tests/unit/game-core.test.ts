@@ -343,15 +343,23 @@ describe('game core: dispatcher, snapshot and persistence', () => {
     const s = room();
     const before = clone(s);
     for (const a of [
-      { type: 'icebreakerStart', playerId: 'p01', target: 'p06' },
-      { type: 'riddleAnswer', playerId: 'p01', text: 'x' },
       { type: 'host.callNext', expectedTeamId: 'pixel' },
-      { type: 'host.adjustScore', teamId: 'pixel', delta: 5 },
-      { type: 'tick' },
+      { type: 'host.undoCall' },
+      { type: 'bossAnswer', playerId: 'p01', text: 'x' },
     ] as Action[]) {
       const r = run(s, a, 2000);
       expect(r.error).toMatch(/not implemented/i);
       expect(r.out).toEqual([]);
+    }
+    expect(s).toEqual(before);
+  });
+
+  it('unknown action types, including Object.prototype keys, return an error and leave state unchanged', () => {
+    const s = room();
+    const before = clone(s);
+    for (const type of ['nope', 'toString', 'constructor', 'hasOwnProperty', '__proto__']) {
+      const r = run(s, { type } as unknown as Action, 2000);
+      expect(r).toEqual({ out: [], persist: false, snapshot: false, error: 'unknown action' });
     }
     expect(s).toEqual(before);
   });

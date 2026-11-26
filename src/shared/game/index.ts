@@ -5,21 +5,19 @@ import type { Action, ActionType, PublicSnapshot } from '../protocol';
 import { type Ctx, type Handler, type Result, err } from './result';
 import { playerHandlers } from './players';
 import { phaseHandlers } from './phase';
+import { scoringHandlers } from './scoring';
 
 export type { Ctx, To, Outbound, Result, Handler, HandlerMap } from './result';
 export { ok, err, ignored } from './result';
+export { addPoints, onTeamDeparted } from './scoring';
 export {
   createState, persistable, restore, slotOf, isPlayingTeam, activePlayers, type Persisted,
 } from './state';
 
-// ---- NOT YET IMPLEMENTED (Tasks 5 and 6) ----
+// ---- NOT YET IMPLEMENTED (Task 6) ----
 // Each later task deletes its keys here and spreads its own handler map into HANDLERS.
 const notYet = (_s: GameState, a: Action): Result => err(`Not implemented yet: ${a.type}`);
 const notYetImplemented = {
-  // Task 5 (game/scoring.ts)
-  icebreakerStart: notYet, icebreakerAnswered: notYet, icebreakerConfirm: notYet, icebreakerCancel: notYet,
-  riddleAnswer: notYet, riddleSkip: notYet, quizAnswer: notYet,
-  'host.quizStart': notYet, 'host.adjustScore': notYet, tick: notYet,
   // Task 6 (game/calls.ts)
   bossAnswer: notYet, 'host.callNext': notYet, 'host.undoCall': notYet,
 };
@@ -29,13 +27,15 @@ const HANDLERS: { [T in ActionType]: Handler<T> } = {
   ...notYetImplemented,
   ...playerHandlers,
   ...phaseHandlers,
+  ...scoringHandlers,
 };
 
 /** Mutates `state`. On `error`, state is unchanged and nothing is sent except the error. */
 export function apply(state: GameState, action: Action, ctx: Ctx): Result {
   // Indexing a mapped type by a union loses the type/handler pairing; HANDLERS guarantees it.
-  const h = HANDLERS[action.type] as ((s: GameState, a: Action, c: Ctx) => Result) | undefined;
-  if (!h) return err('unknown action');
+  // hasOwn: an untrusted type such as 'toString' must not reach Object.prototype.
+  if (!Object.hasOwn(HANDLERS, action.type)) return err('unknown action');
+  const h = HANDLERS[action.type] as (s: GameState, a: Action, c: Ctx) => Result;
   return h(state, action, ctx);
 }
 
