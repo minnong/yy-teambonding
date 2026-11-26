@@ -3,6 +3,7 @@ import type Phaser from 'phaser';
 import { ordinal } from '@shared/ordinal';
 import type { PublicSnapshot } from '@shared/protocol';
 import type { Team } from '@shared/types';
+import { rankPlayingTeams } from '@shared/ranking';
 import { BOARD, COLORS, mono, smoothText } from './roomArt';
 
 export type BoardRowKind = 'leader' | 'team' | 'departed';
@@ -18,16 +19,16 @@ export function boardLine(rank: number, name: string, score: number, width: numb
   return `${left} ${'.'.repeat(Math.max(2, dots))}${right}`;
 }
 
-/** Playing teams by score descending, ties by teamOrder. Shared with the HUD leaderboard overlay. */
+/**
+ * Playing teams in call order: score descending, ties to whoever reached the score first, then
+ * teamOrder (shared/ranking.ts, the same rule as CALL NEXT TEAM). Shared with the HUD overlay.
+ */
 export function rankPlaying(s: PublicSnapshot): Team[] {
-  const order = new Map(s.teamOrder.map((id, i) => [id, i]));
-  return Object.values(s.teams)
-    .filter((t) => t.status === 'playing')
-    .sort((a, b) => b.score - a.score || (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
+  return rankPlayingTeams(s);
 }
 
 /**
- * Playing teams by score (ties by teamOrder), the leader marked when they have points, then
+ * Playing teams in call order (rankPlaying), the leader marked when they have points, then
  * departed teams in departure order as `✅ {ordinal} {name}`.
  */
 export function rankBoard(s: PublicSnapshot, width: number): BoardRow[] {

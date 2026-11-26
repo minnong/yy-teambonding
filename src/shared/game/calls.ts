@@ -4,6 +4,7 @@ import type { ServerMsg } from '../protocol';
 import { nearTable } from '../layout';
 import { positionAt, truncateAt } from '../motion';
 import { matchesAnswer } from '../answers';
+import { rankPlayingTeams } from '../ranking';
 import { type Ctx, type Handler, type HandlerMap, type Outbound, ok, err } from './result';
 import { isPlayingTeam, livePlayer, slotOf } from './state';
 import { onTeamDeparted } from './scoring';
@@ -24,17 +25,11 @@ const playingTeams = (state: GameState): TeamId[] => state.teamOrder.filter((id)
 /**
  * The team the next call would send out: highest score among playing teams, ties to the earliest
  * scoreChangedAt, then the lowest teamOrder index. Null outside the competition or when nobody
- * is left playing.
+ * is left playing. The same ranking as every leaderboard (shared/ranking.ts).
  */
 export function nextLeader(state: GameState): TeamId | null {
   if (state.phase !== 'competition') return null;
-  let best: TeamId | null = null;
-  for (const id of playingTeams(state)) {
-    if (best === null) { best = id; continue; }
-    const t = state.teams[id]!, b = state.teams[best]!;
-    if (t.score > b.score || (t.score === b.score && t.scoreChangedAt < b.scoreChangedAt)) best = id;
-  }
-  return best;
+  return rankPlayingTeams(state)[0]?.id ?? null;
 }
 
 /**

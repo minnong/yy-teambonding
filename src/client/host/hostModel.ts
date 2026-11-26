@@ -2,6 +2,7 @@
 // No DOM here, so every rule the facilitator relies on is unit-tested (tests/unit/host-format.test.ts).
 import { CALL_AMBER_MS, CALL_GREEN_MS, MESSAGE_BUDGET } from '@shared/constants';
 import { ordinal } from '@shared/ordinal';
+import { rankPlayingTeams } from '@shared/ranking';
 import type { PublicSnapshot, ServerMsg } from '@shared/protocol';
 import type { Team, TeamId } from '@shared/types';
 
@@ -74,17 +75,14 @@ export interface BoardRow {
   count: string;
 }
 
-/** Playing teams by score (ties by teamOrder), then departed teams in departure order. */
+/** Playing teams in call order (shared/ranking.ts, as CALL NEXT TEAM), then departed teams in departure order. */
 export function leaderboardRows(h: HostState): BoardRow[] {
   const s = h.snapshot;
-  const order = new Map(s.teamOrder.map((id, i) => [id, i]));
   const count = (id: TeamId) => {
     const c = h.connectedPerTeam[id];
     return `${c?.online ?? 0}/${c?.total ?? 0}`;
   };
-  const playing = Object.values(s.teams)
-    .filter((t) => t.status === 'playing')
-    .sort((a, b) => b.score - a.score || (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
+  const playing = rankPlayingTeams(s);
   const rows: BoardRow[] = playing.map((t, i) => ({
     kind: 'playing', teamId: t.id, rank: i + 1, label: t.name, score: t.score, color: t.color, count: count(t.id),
   }));
