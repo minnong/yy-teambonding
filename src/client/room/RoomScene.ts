@@ -14,6 +14,7 @@ import { TableView } from './tables';
 import { BoardView } from './leaderboard';
 import { ZOOM_TWEEN_MS, chooseView, clampCenter, easeInOut, lerp } from './camera';
 import { attachKeyboard, attachTaps } from './input';
+import { SceneEffects, type RoomEffects } from './effects';
 
 export interface RoomApi {
   scene: RoomScene;
@@ -25,6 +26,8 @@ export interface RoomApi {
    */
   onNearChange(fn: (others: PlayerId[], nearOwnTable: boolean) => void): () => void;
   setZoomedOut(b: boolean): void;
+  /** Transient scene effects for server events (float, emote bubble, table flash). */
+  effects: RoomEffects;
   destroy(): void;
 }
 
@@ -60,6 +63,8 @@ export class RoomScene extends Phaser.Scene {
   private nearOwn = false;
   private readonly mePt: Vec = { x: 0, y: 0 };
   readonly tapFns = new Set<(id: PlayerId) => void>();
+  /** Effects requested before create() are dropped: they are momentary by nature. */
+  private fx: SceneEffects | null = null;
   readonly nearFns = new Set<(others: PlayerId[], nearOwnTable: boolean) => void>();
 
   constructor(private readonly net: Net, private readonly me: Me, snapshot: PublicSnapshot) {
@@ -111,6 +116,15 @@ export class RoomScene extends Phaser.Scene {
     this.marker = this.add.image(0, 0, ART.marker).setDepth(2).setVisible(false);
     this.vignette = this.add.image(0, 0, ART.vignette).setScrollFactor(0).setDepth(VIGNETTE_DEPTH);
     this.detach.push(attachTaps(this, { onTap: (w) => this.onTap(w) }));
+    this.fx = new SceneEffects({
+      scene: this,
+      anchorOf: (id) => {
+        const a = this.avatars.get(id);
+        return a && a.online && a.container.visible ? { x: a.x, top: a.top } : null;
+      },
+      hop: (id) => this.avatars.get(id)?.hop(),
+      slotOf: (teamId) => this.snap.teamOrder.indexOf(teamId),
+    });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.shutdown());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.shutdown());
     this.lastWall = performance.now();
@@ -129,13 +143,24 @@ export class RoomScene extends Phaser.Scene {
       a.update(now, dt, wall);
     }
     this.updateProximity();
+    this.fx?.update(wall);
     for (const t of this.tables) t.bob(wall);
     this.updateCamera(wall);
+  }
+
+  get effects(): RoomEffects {
+    return {
+      float: (teamId, text) => this.fx?.float(teamId, text),
+      emote: (from, kind, target) => this.fx?.emote(from, kind, target),
+      flashTable: (slot) => this.fx?.flashTable(slot),
+    };
   }
 
   private shutdown(): void {
     for (const d of this.detach) d();
     this.detach = [];
+    this.fx?.destroy();
+    this.fx = null;
   }
 
   // ---------- snapshot -> scene ----------
@@ -214,7 +239,15 @@ export class RoomScene extends Phaser.Scene {
 
   private updateProximity(): void {
     const meA = this.avatars.get(this.me.playerId);
-    if (!meA) return;
+    if (!meA) {
+      // My avatar is gone (removed, or look reset): nobody is near and I am at no table (R25c).
+      if (this.nearIds.length === 0 && !this.nearOwn) return;
+      this.nearIds = [];
+      this.nearSet = new Set();
+      this.nearOwn = false;
+      for (const fn of this.nearFns) fn([], false);
+      return;
+    }
     const buf = this.nearBuf;
     buf.length = 0;
     for (const a of this.avatars.values()) {
@@ -349,6 +382,7 @@ export function startRoom(net: Net, me: Me, snapshot: PublicSnapshot): RoomApi {
       return () => { scene.nearFns.delete(fn); };
     },
     setZoomedOut(b) { scene.setZoomedOut(b); },
+    effects: scene.effects,
     destroy() {
       for (const u of unsubs) u();
       cancelAnimationFrame(raf);

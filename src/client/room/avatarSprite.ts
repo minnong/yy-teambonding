@@ -17,6 +17,8 @@ export const BODY_H = 48;
 export const LABEL_DEPTH = 100000;
 const WALK_FPS = 9;
 const FADE_PER_MS = 1 / 1000;
+const HOP_MS = 320;
+const HOP_PX = 8;
 
 const grey = (rgb: number): number => {
   const l = Math.round((0.3 * ((rgb >> 16) & 255) + 0.59 * ((rgb >> 8) & 255) + 0.11 * (rgb & 255)) * 0.9);
@@ -46,6 +48,7 @@ export class AvatarSprite {
   private departed = false;
   private labelOn = false;
   private lookKey = '';
+  private hopAt = -1;
 
   constructor(private readonly scene: Phaser.Scene, init: AvatarInit) {
     this.id = init.id;
@@ -107,6 +110,12 @@ export class AvatarSprite {
     this.container.setAlpha(this.alpha);
   }
 
+  /** A small jump (high-five), played on the next frames. */
+  hop(): void { this.hopAt = performance.now(); }
+
+  /** Top of the label area above the head, in world px. */
+  get top(): number { return this.y - BODY_H - 4 - (this.labelOn ? 14 : 0); }
+
   /** Proximity decides; my own label always shows. */
   setLabelVisible(on: boolean): void { this.labelOn = on || this.isMe; }
 
@@ -139,7 +148,13 @@ export class AvatarSprite {
       this.container.setAlpha(this.alpha);
     }
     const visible = this.alpha > 0;
-    this.container.setVisible(visible).setPosition(this.x, this.y);
+    let hopY = 0;
+    if (this.hopAt >= 0) {
+      const t = (wallMs - this.hopAt) / HOP_MS;
+      if (t >= 1 || t < 0) this.hopAt = -1;
+      else hopY = Math.round(Math.sin(Math.PI * t) * HOP_PX);
+    }
+    this.container.setVisible(visible).setPosition(this.x, this.y - hopY);
     if (this.container.depth !== this.y) this.container.setDepth(this.y); // feet decide draw order
 
     const top = this.y - BODY_H - 4;

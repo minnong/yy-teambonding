@@ -7,10 +7,14 @@ import type { PickerView } from './join/namePicker';
 import { browserToken, clearMe, loadMe, saveMe } from './identity';
 import type { Me } from './identity';
 import { startRoom } from './room/RoomScene';
+import { UiStore } from './ui/store';
+import { mountRoomUi } from './ui/hud';
 import type { PublicSnapshot } from '@shared/protocol';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 const net = new Net();
+// Subscribed before any hello, so the riddle/boss catch-up after `welcome` is kept even mid-builder.
+const store = new UiStore(net);
 
 let me: Me | null = loadMe();
 let picker: PickerView | null = null;
@@ -102,7 +106,7 @@ net.on('close', ({ code }) => {
 net.on('error', (m) => {
   if (m.message === 'unknown player') forgetMe();
   else if (picker) picker.showError(m.message);
-  else console.warn('server error:', m.message);
+  else if (!entered) console.warn('server error:', m.message); // in the room the HUD toasts it
 });
 
 net.on('welcome', (m) => {
@@ -114,7 +118,11 @@ net.on('welcome', (m) => {
   picker?.destroy();
   picker = null;
   if (entered || building) return; // a reconnect welcome: the room scene listens to the net itself
-  const enter = (snap: PublicSnapshot) => { entered = true; startRoom(net, mine, snap); };
+  const enter = (snap: PublicSnapshot) => {
+    entered = true;
+    const room = startRoom(net, mine, snap);
+    mountRoomUi(net, mine, room, store, snap);
+  };
   if (m.snapshot.players[mine.playerId]?.look) { enter(m.snapshot); return; }
   building = true;
   builder = openAvatarBuilder(null, (look) => {

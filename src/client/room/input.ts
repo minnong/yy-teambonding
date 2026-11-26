@@ -74,14 +74,27 @@ export function attachKeyboard(sink: WalkSink, target: Window = window): () => v
     if (dir) apply(keys.release(dir));
   };
   const blur = () => apply(keys.clear());
+  // A tab hidden mid-press may never see the keyup (R25b): stop now rather than walk on.
+  const doc = target.document;
+  const vis = () => { if (doc.visibilityState === 'hidden') apply(keys.clear()); };
   target.addEventListener('keydown', down);
   target.addEventListener('keyup', up);
   target.addEventListener('blur', blur);
+  doc.addEventListener('visibilitychange', vis);
   return () => {
     target.removeEventListener('keydown', down);
     target.removeEventListener('keyup', up);
     target.removeEventListener('blur', blur);
+    doc.removeEventListener('visibilitychange', vis);
   };
+}
+
+/** A tracked pointerdown older than this, or whose pointer is no longer held, is treated as lost. */
+export const STALE_DOWN_MS = 2000;
+
+/** True if the earlier tracked down should be forgotten rather than count as a second finger. */
+export function isStaleDown(prevDownAt: number, nowDownAt: number, prevStillHeld: boolean): boolean {
+  return !prevStillHeld || nowDownAt - prevDownAt > STALE_DOWN_MS;
 }
 
 export interface TapHandlers {
@@ -95,8 +108,10 @@ export interface TapHandlers {
  */
 export function attachTaps(scene: Phaser.Scene, h: TapHandlers): () => void {
   let downId = -1, downX = 0, downY = 0, downAt = 0, cancelled = false;
+  const held = (id: number) => scene.input.manager.pointers.some((q) => q.id === id && q.isDown);
   const onDown = (p: Phaser.Input.Pointer) => {
-    if (downId !== -1) { cancelled = true; return; } // a second finger cancels the tap
+    // A lost pointerup (R25a) would otherwise leave downId set and swallow every later tap.
+    if (downId !== -1 && downId !== p.id && !isStaleDown(downAt, p.downTime, held(downId))) { cancelled = true; return; } // a second finger cancels the tap
     downId = p.id; downX = p.x; downY = p.y; downAt = p.downTime; cancelled = false;
   };
   const onUp = (p: Phaser.Input.Pointer) => {

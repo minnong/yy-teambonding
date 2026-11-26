@@ -2,6 +2,7 @@
 import type Phaser from 'phaser';
 import { ordinal } from '@shared/ordinal';
 import type { PublicSnapshot } from '@shared/protocol';
+import type { Team } from '@shared/types';
 import { BOARD, COLORS, mono, smoothText } from './roomArt';
 
 export type BoardRowKind = 'leader' | 'team' | 'departed';
@@ -17,15 +18,20 @@ export function boardLine(rank: number, name: string, score: number, width: numb
   return `${left} ${'.'.repeat(Math.max(2, dots))}${right}`;
 }
 
+/** Playing teams by score descending, ties by teamOrder. Shared with the HUD leaderboard overlay. */
+export function rankPlaying(s: PublicSnapshot): Team[] {
+  const order = new Map(s.teamOrder.map((id, i) => [id, i]));
+  return Object.values(s.teams)
+    .filter((t) => t.status === 'playing')
+    .sort((a, b) => b.score - a.score || (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
+}
+
 /**
  * Playing teams by score (ties by teamOrder), the leader marked when they have points, then
  * departed teams in departure order as `✅ {ordinal} {name}`.
  */
 export function rankBoard(s: PublicSnapshot, width: number): BoardRow[] {
-  const order = new Map(s.teamOrder.map((id, i) => [id, i]));
-  const playing = Object.values(s.teams)
-    .filter((t) => t.status === 'playing')
-    .sort((a, b) => b.score - a.score || (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
+  const playing = rankPlaying(s);
   const rows: BoardRow[] = playing.map((t, i) => ({
     kind: i === 0 && t.score > 0 ? 'leader' : 'team',
     text: boardLine(i + 1, t.name, t.score, width),
