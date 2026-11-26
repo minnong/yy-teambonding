@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { LAYOUT, isWalkable, toTile, toWorld, spawnFor, nearTable, randomOpenSpot } from '@shared/layout';
 import { findPath, findPathWith } from '@shared/path';
-import { TILE, TABLE_REACH } from '@shared/constants';
+import { TILE } from '@shared/constants';
 
 describe('layout', () => {
   it('wall rows and table tiles are not walkable; aisles are', () => {
@@ -40,7 +40,6 @@ describe('layout', () => {
       for (let slot = 0; slot < 7; slot++) expect(nearTable(p, slot)).toBe(false);
     }
     expect(randomOpenSpot(() => 0.3)).toEqual(randomOpenSpot(() => 0.3));
-    expect(TABLE_REACH).toBe(48);
   });
 
   it('all tables are mutually reachable', () => {
@@ -86,15 +85,22 @@ describe('findPath', () => {
   });
 
   it('does not cut corners', () => {
-    const blocked = new Set(['5,5']);
-    const w = (x: number, y: number) => isWalkable(x, y) && !blocked.has(`${x},${y}`);
-    const path = findPathWith(toWorld(4, 6), toWorld(6, 4), w);
-    expect(path.length).toBeGreaterThan(2);
+    const w = (x: number, y: number) => isWalkable(x, y) && !(x === 5 && y === 25);
+    const from = toWorld(5, 26), to = toWorld(6, 25);
+    const path = findPathWith(from, to, w);
+    // Direct diagonal (5,26)->(6,25) would squeeze past blocked (5,25); must go via (6,26).
+    expect(path).toEqual([from, toWorld(6, 26), to]);
+  });
+
+  it('to a target outside the grid ends at the nearest walkable tile', () => {
+    const path = findPath(toWorld(5, 25), { x: -500, y: 25 * TILE + 16 });
+    expect(path[path.length - 1]).toEqual(toWorld(1, 25));
+    const far = findPath(toWorld(5, 25), { x: 5000, y: 5000 });
+    expect(far[far.length - 1]).toEqual(toWorld(22, 34));
   });
 
   it('compresses collinear points', () => {
     const path = findPath(toWorld(2, 25), toWorld(20, 25));
     expect(path).toHaveLength(2);
-    expect(TILE).toBe(32);
   });
 });

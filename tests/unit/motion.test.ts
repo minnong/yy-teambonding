@@ -36,4 +36,42 @@ describe('motion', () => {
     expect(pathPassesNear(m, 1800, 1900, p, 20)).toBe(false);
     expect(pathPassesNear(m, 3000, 4000, { x: 128, y: 5 }, 10)).toBe(true); // standing at end
   });
+
+  it('isMoving is false before startedAt', () => {
+    expect(isMoving(m, 500)).toBe(false);
+  });
+
+  it('handles a 1-point path', () => {
+    const one: Motion = { path: [{ x: 10, y: 10 }], startedAt: 0 };
+    expect(positionAt(one, 5000)).toEqual({ x: 10, y: 10 });
+    expect(isMoving(one, 100)).toBe(false);
+    expect(pathPassesNear(one, 0, 1000, { x: 12, y: 10 }, 5)).toBe(true);
+    expect(pathPassesNear(one, 0, 1000, { x: 30, y: 10 }, 5)).toBe(false);
+  });
+
+  it('accepts t0 > t1', () => {
+    expect(pathPassesNear(m, 2000, 1000, { x: 64, y: 10 }, 20)).toBe(true);
+    expect(pathPassesNear(m, 2000, 1000, { x: 64, y: 50 }, 20)).toBe(false);
+  });
+
+  it('handles a zero-length segment', () => {
+    const z: Motion = { path: [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 128, y: 0 }], startedAt: 0 };
+    expect(positionAt(z, 500)).toEqual({ x: 64, y: 0 });
+    expect(pathPassesNear(z, 0, 1000, { x: 100, y: 5 }, 10)).toBe(true);
+  });
+
+  it('L-shaped path: only the corner is within r', () => {
+    const L: Motion = { path: [{ x: 0, y: 0 }, { x: 128, y: 0 }, { x: 128, y: 128 }], startedAt: 0 };
+    // Window sampled at ends is far from p, but the corner (t=1000) passes within r.
+    const p = { x: 138, y: -8 };
+    expect(pathPassesNear(L, 0, 2000, p, 15)).toBe(true);
+    expect(pathPassesNear(L, 0, 2000, { x: 150, y: -30 }, 15)).toBe(false);
+    // Same path, window entirely before the corner: p is >r away.
+    expect(pathPassesNear(L, 0, 800, p, 15)).toBe(false);
+  });
+
+  it('window starting before startedAt', () => {
+    expect(pathPassesNear(m, -5000, 500, { x: 0, y: 5 }, 10)).toBe(true);
+    expect(pathPassesNear(m, -5000, 500, { x: 128, y: 0 }, 10)).toBe(false);
+  });
 });

@@ -28,7 +28,7 @@ export function positionAt(m: Motion, now: number): Vec {
 }
 
 export function isMoving(m: Motion, now: number): boolean {
-  return m.path.length > 1 && now < m.startedAt + (totalLength(m.path) / WALK_SPEED) * 1000;
+  return m.path.length > 1 && now >= m.startedAt && now < m.startedAt + (totalLength(m.path) / WALK_SPEED) * 1000;
 }
 
 export function truncateAt(m: Motion, now: number): Motion {
