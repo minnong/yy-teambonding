@@ -8,7 +8,8 @@
     "pretest": "vite build --logLevel error",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "deploy": "vite build && wrangler deploy"
+    "deploy": "vite build && wrangler deploy",
+    "bots": "tsx scripts/bots.ts"
   },
   "dependencies": {
     "phaser": "^3.90.0",
