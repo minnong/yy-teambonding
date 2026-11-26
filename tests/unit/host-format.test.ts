@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { Heartbeat } from '../../src/client/host/heartbeat';
+import { Heartbeat } from '../../src/client/heartbeat';
 import {
   budgetLevel, budgetPercent, budgetText, buttonStates, callConfirmText, callTimerState, formatElapsed,
   leaderboardRows, nextUpText, sinceLastCall, teamCountText, undoTarget, type HostState,
@@ -221,6 +221,20 @@ describe('Heartbeat (fix round 1)', () => {
     hb.stop();
     vi.advanceTimersByTime(60000);
     expect(pings).toHaveLength(2);
+  });
+  it('probe() pings once now; a second probe waits for the outstanding one (I3)', () => {
+    let pings = 0, misses = 0;
+    const hb = new Heartbeat(() => { pings++; return true; }, () => { misses++; }, 15000, 5000);
+    hb.probe();
+    hb.probe();
+    expect(pings).toBe(1);
+    vi.advanceTimersByTime(5000);
+    expect(misses).toBe(1);
+    hb.probe();
+    hb.pong();
+    vi.advanceTimersByTime(60000);
+    expect(pings).toBe(2);
+    expect(misses).toBe(1); // no interval was started by probe()
   });
   it('a ping that could not be sent (socket not open) sets no deadline', () => {
     let misses = 0;

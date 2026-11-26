@@ -11,7 +11,7 @@ import {
   budgetLevel, budgetText, buttonStates, callConfirmText, callTimerState, guardUntil, isLocked, leaderboardRows,
   MODAL_GUARD_MS, nextUpText, sinceLastCall, teamCountText, undoTarget, type ButtonStates, type Guard, type HostState,
 } from './hostModel';
-import { Heartbeat } from './heartbeat';
+import { Heartbeat } from '../heartbeat';
 
 const PIN_KEY = 'lobby.hostPin';
 /** A reply that never comes (socket died mid-send) must not lock the console for good. */

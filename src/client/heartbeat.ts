@@ -1,5 +1,5 @@
-// Host-only liveness check while the page is visible: a raw `ping` every 15 s that must be answered
-// within 5 s. The Room's auto-response answers it without counting it or waking the object.
+// Liveness check over the raw `ping` the Room's auto-response answers (uncounted, never wakes the
+// object). The host page runs it every 15 s while visible; Net probes once on every unlock (I3).
 export const HEARTBEAT_MS = 15_000;
 export const PONG_DEADLINE_MS = 5_000;
 
@@ -29,6 +29,9 @@ export class Heartbeat {
   pong(): void {
     if (this.deadline !== null) { clearTimeout(this.deadline); this.deadline = null; }
   }
+
+  /** One ping now, outside the interval (the page just became visible). Waits on an outstanding one. */
+  probe(): void { this.beat(); }
 
   private beat(): void {
     if (this.deadline !== null) return; // still waiting on the last one

@@ -1,8 +1,10 @@
 // Client socket layer: reconnect with backoff, hello replay, clock offset from server timestamps.
 // No JSON pings: keep-alive is the runtime's raw ping/pong (uncounted); every JSON message costs budget.
+// Each unlock (visibilitychange to visible) probes an open socket with that raw ping (I3).
 import type { ClientMsg, PlayerWireAction, HostAction, ServerMsg } from '@shared/protocol';
 import type { AvatarLook } from '@shared/types';
 import { ActBudget, localBudgetStore } from './actBudget';
+import { Heartbeat, HEARTBEAT_MS, PONG_DEADLINE_MS } from './heartbeat';
 
 export type ClientHello = Extract<ClientMsg, { t: 'hello' | 'addSelf' | 'hostHello' }>;
 export type Intro = ClientHello | { t: 'peek' };
@@ -18,6 +20,8 @@ const MAX_SAMPLES = 5;
 /** Must match the Room's WebSocketRequestResponsePair('ping', 'pong'). */
 const PING = 'ping';
 const PONG = 'pong';
+/** I3: after an unlock the raw ping must be answered this fast, or the socket is treated as dead. */
+export const PROBE_DEADLINE_MS = PONG_DEADLINE_MS;
 
 /** Median of `server - (sent+received)/2`. */
 export function clockOffset(samples: ClockSample[]): number {
@@ -66,6 +70,11 @@ export class Net {
   private visBound = false;
   /** R28: every `act` frame is charged here; over the cap it is refused locally and never sent. */
   readonly budget: ActBudget;
+  /**
+   * I3: a phone unlocked onto a socket that looks open may be dead (lock, Wi-Fi to mobile data), and
+   * no close event would ever say so. Each unlock sends one raw ping; no pong in time, reconnect.
+   */
+  private readonly probe = new Heartbeat(() => this.ping(), () => this.onProbeMiss(), HEARTBEAT_MS, PROBE_DEADLINE_MS);
 
   constructor(opts: NetOptions = {}) {
     this.Ctor = opts.WebSocketCtor ?? WebSocket;
@@ -89,9 +98,19 @@ export class Net {
   /** Changes what reconnects replay (e.g. the plain hello once a join succeeded) without touching the socket. */
   remember(intro: Intro): void { this.intro = intro; }
 
-  /** Tab became visible: if not open, reconnect now and reset the backoff. */
+  /**
+   * Tab became visible: if not open, reconnect now and reset the backoff. If it looks open, probe
+   * it with the raw ping (free, I3); a missing pong reconnects in onProbeMiss.
+   */
   onVisible(): void {
-    if (this.state === 'closed' || this.state === 'open' || !this.intro) return;
+    if (this.state === 'closed' || !this.intro) return;
+    if (this.state === 'open') { this.probe.probe(); return; }
+    this.attempt = 0;
+    this.open('reconnecting');
+  }
+
+  private onProbeMiss(): void {
+    if (this.state !== 'open' || !this.intro) return;
     this.attempt = 0;
     this.open('reconnecting');
   }
@@ -143,6 +162,7 @@ export class Net {
   serverNow(): number { return Date.now() + this.offset; }
 
   close(): void {
+    this.probe.stop();
     this.clearTimer();
     this.detach();
     this.setState('closed');
@@ -168,6 +188,7 @@ export class Net {
   }
 
   private open(state: NetState): void {
+    this.probe.pong(); // a new socket: the old one's outstanding probe no longer matters
     this.clearTimer();
     this.detach();
     this.setState(state);
@@ -191,7 +212,7 @@ export class Net {
   private firstSend = true;
 
   private onMessage(raw: string): void {
-    if (raw === PONG) { this.emit('pong', null); return; }
+    if (raw === PONG) { this.probe.pong(); this.emit('pong', null); return; }
     let m: ServerMsg;
     try { m = JSON.parse(raw) as ServerMsg; } catch { return; }
     const now = Date.now();
@@ -209,6 +230,7 @@ export class Net {
 
   private onClose(code: number, reason: string): void {
     this.ws = null;
+    this.probe.pong();
     this.emit('close', { code, reason });
     if (NO_RECONNECT.has(code)) { this.setState('closed'); return; }
     if (code === RESET_CODE) { this.attempt = 0; this.open('reconnecting'); return; }

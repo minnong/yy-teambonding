@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Net, clockOffset, RECONNECT_DELAYS } from '../../src/client/net';
+import { Net, clockOffset, PROBE_DEADLINE_MS, RECONNECT_DELAYS } from '../../src/client/net';
 
 class FakeWS {
   static all: FakeWS[] = [];
@@ -22,12 +22,14 @@ const hello = { t: 'hello', playerId: 'p01', token: 'tok-12345678' } as const;
 const last = () => FakeWS.all[FakeWS.all.length - 1]!;
 function mk() {
   const vis = { listeners: [] as (() => void)[], state: 'visible' };
+  /** The page went hidden and is visible again (a phone unlock). */
+  const show = () => vis.listeners.forEach((f) => f());
   const net = new Net({
     WebSocketCtor: FakeWS as unknown as typeof WebSocket,
     url: 'ws://x/ws',
     visibility: { get state() { return vis.state; }, onVisible: (f) => { vis.listeners.push(f); } },
   });
-  return { net, vis };
+  return { net, vis, show };
 }
 
 beforeEach(() => { FakeWS.all = []; vi.useFakeTimers(); vi.setSystemTime(1_000_000); });
@@ -114,11 +116,12 @@ describe('Net', () => {
     expect(FakeWS.all).toHaveLength(4);
   });
 
-  it('visibility does nothing when open or closed for good', () => {
+  it('visibility opens no new socket when open or closed for good', () => {
     const { net, vis } = mk();
     net.connect(hello); last().open();
     vis.listeners.forEach((f) => f());
     expect(FakeWS.all).toHaveLength(1);
+    last().onmessage?.({ data: 'pong' }); // answer the unlock probe
     last().drop(4000);
     vis.listeners.forEach((f) => f());
     expect(FakeWS.all).toHaveLength(1);
@@ -241,6 +244,60 @@ describe('Net join look (I1)', () => {
     expect(net.act({ type: 'setLook', look })).toBe(false);
     expect(net.sendJoinLook(look)).toBe(true);
     expect(JSON.parse(last().sent.at(-1)!)).toEqual({ t: 'act', a: { type: 'setLook', look } });
+  });
+});
+
+describe('Net unlock probe (I3)', () => {
+  it('on visible with an open socket, sends the raw ping (no act, no budget) and keeps the socket on pong', () => {
+    const { net, show } = mk();
+    net.connect(hello); last().open();
+    show();
+    expect(last().sent.at(-1)).toBe('ping');
+    expect(PROBE_DEADLINE_MS).toBe(5000);
+    vi.advanceTimersByTime(PROBE_DEADLINE_MS - 1);
+    last().onmessage?.({ data: 'pong' });
+    vi.advanceTimersByTime(60_000);
+    expect(FakeWS.all).toHaveLength(1);
+    expect(net.state).toBe('open');
+  });
+
+  it('no pong within 5 s: the half-open socket is dropped and the hello replayed on a new one', () => {
+    const { net, show } = mk();
+    net.connect(hello); last().open();
+    const dead = last();
+    show();
+    vi.advanceTimersByTime(PROBE_DEADLINE_MS - 1);
+    expect(FakeWS.all).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(FakeWS.all).toHaveLength(2);
+    expect(net.state).toBe('reconnecting');
+    expect(dead.onmessage).toBeNull(); // detached: a late frame from it is ignored
+    last().open();
+    expect(last().sent.map((s) => JSON.parse(s))).toEqual([hello]);
+    vi.advanceTimersByTime(60_000);
+    expect(FakeWS.all).toHaveLength(2);
+  });
+
+  it('repeated unlocks send one probe at a time; a socket replaced meanwhile cancels the deadline', () => {
+    const { net, show } = mk();
+    net.connect(hello); last().open();
+    show(); show(); show();
+    expect(last().sent.filter((s) => s === 'ping')).toHaveLength(1);
+    last().drop(); // the browser noticed on its own: normal reconnect
+    vi.advanceTimersByTime(500);
+    last().open();
+    vi.advanceTimersByTime(60_000);
+    expect(FakeWS.all).toHaveLength(2);
+  });
+
+  it('a probe is not refused by, or charged to, the act cap', () => {
+    const { net, show } = mk();
+    net.connect(hello); last().open();
+    for (let i = 0; i < 30; i++) net.act({ type: 'quizAnswer', choice: 0 });
+    show();
+    expect(last().sent.at(-1)).toBe('ping');
+    last().onmessage?.({ data: 'pong' });
+    expect(net.state).toBe('open');
   });
 });
 
