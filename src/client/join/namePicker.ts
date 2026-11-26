@@ -33,8 +33,10 @@ export function showNamePicker(root: HTMLElement, net: Net, h: PickerHandlers): 
   wrap.replaceChildren(el('h1', undefined, 'Who are you?'), el('p', 'lb-status', 'Connecting…'));
   let error: HTMLElement | null = null;
   let snap: PublicSnapshot | null = null;
+  let rendered = false;
 
-  const off = net.on('snapshot', (m) => { snap = m.snapshot; renderList(); });
+  // Render once: a later snapshot (peek replay after a reconnect) must not wipe the add-yourself form.
+  const off = net.on('snapshot', (m) => { snap = m.snapshot; if (!rendered) { rendered = true; renderList(); } });
   const offState = net.on('state', (s) => {
     if (!snap && s === 'reconnecting') wrap.querySelector('.lb-status')?.replaceChildren('Connecting…');
   });
@@ -49,7 +51,7 @@ export function showNamePicker(root: HTMLElement, net: Net, h: PickerHandlers): 
         .sort((a, b) => a.name.localeCompare(b.name));
       if (players.length === 0) continue;
       const head = el('h2', 'lb-team', team.name);
-      head.style.color = team.color;
+      head.style.borderLeftColor = team.color;
       list.appendChild(head);
       for (const p of players) {
         const b = el('button', 'lb-row', p.name);

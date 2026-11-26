@@ -10,7 +10,7 @@ h1{margin:0;font-size:22px;line-height:32px;text-align:center}
 .lb-picker,.lb-screen{width:100%;max-width:420px;height:100%;display:flex;flex-direction:column;gap:10px;padding:max(12px,env(safe-area-inset-top)) 14px max(10px,env(safe-area-inset-bottom))}
 .lb-status{text-align:center;opacity:.8}
 .lb-list{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:6px}
-.lb-team{margin:10px 0 2px;font-size:15px;text-transform:uppercase;letter-spacing:.05em}
+.lb-team{margin:10px 0 2px;font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:#f2f2fa;border-left:8px solid #888;padding-left:10px}
 .lb-row{flex:0 0 auto;min-height:48px;text-align:left;padding:0 16px;font-size:17px;border-radius:12px;background:#2b2b4a;border-left:8px solid #888}
 .lb-row:active{background:#3a3a63}
 .lb-foot{flex:0 0 auto;display:flex;flex-direction:column;align-items:stretch;gap:2px}

@@ -150,6 +150,34 @@ describe('Net', () => {
     expect(JSON.parse(last().sent.at(-1)!)).toEqual({ t: 'host', a: { type: 'host.pause' } });
   });
 
+  it('addSelf after a delay does not skew the clock (sample uses the addSelf send time)', () => {
+    const { net } = mk();
+    net.connect({ t: 'peek' }); last().open();
+    vi.advanceTimersByTime(60_000); // user types for a minute
+    net.send({ t: 'addSelf', name: 'Zed', teamId: 'otter', token: 'tok-12345678' });
+    vi.advanceTimersByTime(100);
+    last().recv({ type: 'welcome', you: 'x-zed-1', token: 't', serverNow: Date.now() + 1_000_000 - 50, snapshot: {} });
+    expect(net.serverNow()).toBe(Date.now() + 1_000_000);
+  });
+
+  it('peek alone yields no welcome sample; a peek snapshot still does', () => {
+    const { net } = mk();
+    net.connect({ t: 'peek' }); last().open();
+    last().recv({ type: 'snapshot', snapshot: { serverNow: Date.now() + 500 } });
+    expect(net.serverNow()).toBe(Date.now() + 500);
+  });
+
+  it('a takeover hello is not replayed on reconnect', () => {
+    const { net } = mk();
+    net.connect({ ...hello, takeover: true });
+    last().open();
+    expect(JSON.parse(last().sent[0]!)).toEqual({ ...hello, takeover: true });
+    last().drop();
+    vi.advanceTimersByTime(500);
+    last().open();
+    expect(JSON.parse(last().sent[0]!)).toEqual(hello);
+  });
+
   it('emits close events and re-hello with takeover via connect()', () => {
     const { net } = mk();
     const fn = vi.fn();

@@ -89,6 +89,7 @@ export class Net {
   /** Sends a raw client message if the socket is open. Returns false if it was dropped. */
   send(msg: ClientMsg): boolean {
     if (!this.ws || this.ws.readyState !== 1) return false;
+    if (msg.t === 'hello' || msg.t === 'addSelf') this.introSentAt = Date.now();
     this.ws.send(JSON.stringify(msg));
     return true;
   }
@@ -138,7 +139,8 @@ export class Net {
     ws.onopen = () => {
       this.attempt = 0;
       this.setState('open');
-      this.introSentAt = Date.now();
+      // Peek is not answered by a welcome; a later addSelf stamps its own send time in send().
+      this.introSentAt = this.intro?.t === 'peek' ? 0 : Date.now();
       const intro = this.intro!;
       // A replayed takeover could kick a device that legitimately took over since: only the first send carries it.
       const out = intro.t === 'hello' && intro.takeover && !this.firstSend ? { ...intro, takeover: undefined } : intro;
@@ -155,7 +157,7 @@ export class Net {
     let m: ServerMsg;
     try { m = JSON.parse(raw) as ServerMsg; } catch { return; }
     const now = Date.now();
-    if (m.type === 'welcome') this.sample({ sent: this.introSentAt, server: m.serverNow, received: now });
+    if (m.type === 'welcome') { if (this.introSentAt > 0) this.sample({ sent: this.introSentAt, server: m.serverNow, received: now }); this.introSentAt = 0; }
     else if (m.type === 'snapshot' && typeof m.snapshot?.serverNow === 'number') {
       this.sample({ sent: now, server: m.snapshot.serverNow, received: now });
     }

@@ -18,6 +18,7 @@ let roster: PublicSnapshot | null = null;
 let overlay: HTMLElement | null = null;
 let entered = false;
 let building = false;
+let builder: { close(): void } | null = null;
 
 function mk<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -63,6 +64,7 @@ function takeoverHello(): ClientHello | null {
 }
 
 function showKicked(): void {
+  if (building) { builder?.close(); builder = null; building = false; } // the takeover screen must not hide under the builder
   showOverlay(
     mk('h1', '', 'You opened the lobby somewhere else'),
     (() => {
@@ -86,7 +88,7 @@ function showNameTaken(playerId: string): void {
 function forgetMe(): void {
   clearMe();
   me = null;
-  if (entered) location.reload();
+  if (entered || building) location.reload();
   else showPicker();
 }
 
@@ -115,8 +117,9 @@ net.on('welcome', (m) => {
   const enter = (snap: PublicSnapshot) => { entered = true; startRoom(net, mine, snap); };
   if (m.snapshot.players[mine.playerId]?.look) { enter(m.snapshot); return; }
   building = true;
-  openAvatarBuilder(null, (look) => {
+  builder = openAvatarBuilder(null, (look) => {
     building = false;
+    builder = null;
     net.act({ type: 'setLook', look });
     const p = m.snapshot.players[mine.playerId];
     enter(p ? { ...m.snapshot, players: { ...m.snapshot.players, [p.id]: { ...p, look } } } : m.snapshot);
