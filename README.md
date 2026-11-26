@@ -46,7 +46,7 @@ Fill the room with 35 fake players:
 npm run bots -- --url https://team-lobby.<account>.workers.dev --allow-remote --bots 35 --minutes 5 --pin <your pin> --reset --start
 ```
 
-- It only works while the room is in warm-up. A room that is already in the competition is never reset by the bots.
+- It only works while the room is in warm-up. If the event has started, the bots refuse and do nothing.
 - It wipes the room at the start and again at the end. Anyone real who joined during the run is wiped too.
 - Afterwards, check the "Messages today" figure in the host page footer (see the checklist).
 - Then join from 2 or 3 real phones (at least one iPhone and one Android). Walk around, do an icebreaker and a riddle.
@@ -56,13 +56,13 @@ npm run bots -- --url https://team-lobby.<account>.workers.dev --allow-remote --
 - [ ] Open `/host` about 15 minutes early and enter the PIN.
 - [ ] If you did a dry run today, press Reset (Scores tab, Danger zone).
 - [ ] Open the QR tab, press "Show QR full-screen" and project it.
-- [ ] Check "Messages today" in the footer. The free plan allows 100,000 requests a day; a 36-person session uses about 13,000. The app stops a session at about 26,000. So do no more than about 2 full dry runs on the same day as the event.
+- [ ] Check the footer at the bottom of the host page. It reads "Messages today: N / 30,000 budget". 30,000 is the app's own daily safety budget, set well below Cloudflare's free limit of 100,000 requests a day. A normal 36-person session uses about 13,000, and the app hard-caps a session at about 26,000. The footer turns red above 80% (24,000). Stop doing dry runs once it turns red; on the day of the event, do no more than about one full dry run.
 - [ ] Keep one laptop or phone on `/host` for the facilitator.
 
 ## 6. Running it (organiser, minutes 0 to 5)
 
 1. Warm-up: everyone scans, picks a name, builds an avatar, wanders, uses emotes and icebreakers. No points yet. The host page shows each team's online count.
-2. About minute 5, press START COMPETITION on the Run tab and confirm. The first team is marked as going first and its table greys out. Scoring opens for the other teams.
+2. About minute 5, press START COMPETITION on the Run tab and confirm. The first team is marked as going first and heads out. Scoring starts for the other teams.
 3. Leave with the first team. The facilitator takes over the host page.
 
 ## 7. Facilitator cheat sheet
@@ -73,10 +73,10 @@ All buttons are on the Run tab unless noted. Tabs: Run, Scores, People, QR.
 |---|---|---|
 | CALL NEXT TEAM | When the next activity is ready (about every 5 minutes) | The confirm shows the team's name. Press "Yes, call them". Their table flashes "You're up!", their score freezes, they head out. The timer turns amber at 4:30 and green at 5:00. If it says "The leader changed, check again", the order moved just now; press again. |
 | QUICK-FIRE QUIZ | When energy dips | Starts a short quiz for everyone still in the room. It reads QUIZ RUNNING... until it ends. |
-| Undo last call | You called by mistake | Brings the last team back into the game. The button names the team. |
+| Undo last call (bring back TEAMNAME) | You called by mistake | The button shows the team's name. A confirm asks "Bring TEAM X back into the game?"; press "Bring them back". |
 | Pause / Resume | You need everyone to stop for a moment | Freezes the room (the header shows PAUSED). Resume carries on. |
-| Scores tab: +/- buttons | A dispute over points | Adjusts a team's score. |
-| Scores tab: Reset event | Dry runs only | Clears everything and sends everyone back to the start. You must confirm twice and type RESET. |
+| Scores tab: -10, -5, +5, +10 under each team | A dispute over points | Changes that team's score by that amount. |
+| Scores tab: Reset event | Dry runs only, before the event | Clears everything and sends everyone back to the start. You must confirm twice and type RESET. **Never press Reset during the event — it erases all scores and sends everyone back to the start.** |
 
 Other things to know:
 
