@@ -26,6 +26,9 @@ import {
 const EMOTE_LABEL: Record<string, string> = { wave: 'Wave', highfive: 'High-five', laugh: 'Laugh', heart: 'Heart' };
 /** Client-side spam guard for emote taps (message budget). */
 const EMOTE_COOLDOWN_MS = 900;
+/** R28 nudge when the rolling act cap refuses a tap (at most one toast per SLOW_TOAST_MS). */
+export const SLOW_DOWN_TEXT = 'Whoa, slow down a little! 🙂';
+const SLOW_TOAST_MS = 3000;
 /** Guard keys: one in-flight send each, cleared by the matching reply (or any error), else after PENDING_MS. */
 const CARD = 'card', RIDDLE = 'riddle', START_IB = 'icebreakerStart';
 const QUIET_ERRORS = new Set(['unknown player']);
@@ -207,7 +210,12 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
     quiz?.close();
     quiz = openQuizModal(hud, q, {
       now: () => net.serverNow(),
-      answer: (choice) => { store.answered.add(quizKey(q)); net.act({ type: 'quizAnswer', choice }); },
+      // Not locked in unless it was really sent (offline, or over the R28 cap: try again).
+      answer: (choice) => {
+        if (!net.act({ type: 'quizAnswer', choice })) return false;
+        store.answered.add(quizKey(q));
+        return true;
+      },
       onClose: () => { quiz = null; },
     });
   };
@@ -268,6 +276,19 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
     if (QUIET_ERRORS.has(m.message)) return;
     if (riddle && m.message === WRONG_TEXT) { riddle.wrong(); return; }
     banners.toast(m.message);
+  });
+  // R28: Net refused an act over the rolling cap and sent nothing. Moves just wait (they coalesce),
+  // a released key's stop is never refused; anything else gets a gentle nudge and its buttons back.
+  let slowToastAt = -Infinity;
+  on('throttled', (m) => {
+    if (m.type === 'move' || m.type === 'stop') return;
+    guard.clear(CARD); guard.clear(RIDDLE); guard.clear(START_IB);
+    riddle?.update();
+    if (cardEl.hidden === false) renderCard();
+    const now = performance.now();
+    if (now - slowToastAt < SLOW_TOAST_MS) return;
+    slowToastAt = now;
+    banners.toast(SLOW_DOWN_TEXT);
   });
   on('icebreaker', (m) => {
     guard.clear(CARD);

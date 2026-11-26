@@ -137,7 +137,8 @@ export function openRiddleModal(hud: HTMLElement, o: RiddleModalOpts): RiddleMod
 
 export interface QuizModal { readonly endsAt: number; close(): void }
 
-export function openQuizModal(hud: HTMLElement, quiz: QuizInfo, o: { now(): number; answer(choice: number): void; onClose(): void }): QuizModal {
+/** `answer` returns false when the answer could not be sent; the choices then stay open. */
+export function openQuizModal(hud: HTMLElement, quiz: QuizInfo, o: { now(): number; answer(choice: number): boolean | void; onClose(): void }): QuizModal {
   let closed = false;
   const close = () => {
     if (closed) return;
@@ -157,7 +158,7 @@ export function openQuizModal(hud: HTMLElement, quiz: QuizInfo, o: { now(): numb
   quiz.choices.forEach((c, i) => {
     grid.appendChild(button('lb-choice', c, () => {
       if (!locked.hidden) return;
-      o.answer(i);
+      if (o.answer(i) === false) return;
       grid.querySelectorAll('button').forEach((b, j) => { b.disabled = true; b.classList.toggle('lb-picked', j === i); });
       locked.hidden = false;
     }));

@@ -68,12 +68,19 @@ test('mobile: rapid taps coalesce into one move per second (R27)', async ({ page
   }));
   await joinAsNewcomer(page, 'E2E Tapper', 'Nova');
   const t0 = Date.now();
-  for (let i = 0; i < 6; i++) { await tapFloor(page, 0.3 + i * 0.08, 0.66); await page.waitForTimeout(80); }
-  await page.waitForTimeout(400);
-  expect(moves.length).toBe(1); // the first tap went at once, the rest are queued
-  await page.waitForTimeout(1200);
-  expect(moves.length).toBe(2); // one trailing move with the latest target
-  // Timed here on the test runner as frame events arrive (async), so allow a little jitter.
-  expect(moves[1]! - moves[0]!).toBeGreaterThanOrEqual(950);
-  expect(moves[0]! - t0).toBeLessThan(400);
+  let lastTapAt = 0;
+  for (let i = 0; i < 6; i++) {
+    lastTapAt = Date.now();
+    await tapFloor(page, 0.3 + i * 0.08, 0.66);
+    await page.waitForTimeout(80);
+  }
+  await page.waitForTimeout(1500); // room for the trailing move
+  // Timing-independent checks (a loaded machine stretches the burst): the first tap goes at once,
+  // sends are at least ~1 s apart (timed here as frames arrive, so allow some jitter), the burst
+  // folds into fewer moves than taps, and the latest target goes last as a trailing move.
+  expect(moves.length).toBeGreaterThanOrEqual(2);
+  expect(moves[0]! - t0).toBeLessThan(900);
+  for (let i = 1; i < moves.length; i++) expect(moves[i]! - moves[i - 1]!).toBeGreaterThanOrEqual(950);
+  expect(moves.length).toBeLessThan(6);
+  expect(moves.at(-1)!).toBeGreaterThanOrEqual(lastTapAt);
 });

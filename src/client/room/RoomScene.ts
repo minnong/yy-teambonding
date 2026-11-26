@@ -236,7 +236,7 @@ export class RoomScene extends Phaser.Scene {
     const to = { x: Math.round(Phaser.Math.Clamp(w.x, 0, WORLD_W)), y: Math.round(Phaser.Math.Clamp(w.y, 0, WORLD_H)) };
     // The marker shows at once; the move itself may be coalesced into a trailing send (R27).
     const now = Date.now();
-    const go = this.moves.request(to, now);
+    const go = this.moves.request(to, now, this.net.budget.allowedAt('move', now));
     if (go) this.net.act({ type: 'move', to: go });
     else this.scheduleQueuedMove();
     this.tweens.killTweensOf(this.marker);
@@ -245,11 +245,13 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private scheduleQueuedMove(): void {
-    const at = this.moves.nextAt();
+    const at = this.moves.nextAt(this.net.budget.allowedAt('move', Date.now()));
     if (at === null || this.moveTimer !== null) return;
     this.moveTimer = setTimeout(() => {
       this.moveTimer = null;
-      const go = this.moves.flush(Date.now());
+      const now = Date.now();
+      // Checked and taken in the same turn: the shared budget (R28) cannot change in between.
+      const go = this.moves.flush(now, this.net.budget.allowedAt('move', now));
       if (go) this.net.act({ type: 'move', to: go });
       else this.scheduleQueuedMove(); // woke a hair early
     }, Math.max(0, at - Date.now()));

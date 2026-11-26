@@ -57,3 +57,13 @@ describe('MoveThrottle (R27)', () => {
     expect(t.flush(2000)).toBeNull();
   });
 });
+
+describe('MoveThrottle under the shared act budget (R28)', () => {
+  it('notBefore holds the first and the trailing move until the budget allows', () => {
+    const t = new MoveThrottle();
+    expect(t.request(p(1), 0, 5000)).toBeNull();
+    expect(t.nextAt(5000)).toBe(5000);
+    expect(t.flush(4999, 5000)).toBeNull();
+    expect(t.flush(5000, 5000)).toEqual(p(1));
+  });
+});

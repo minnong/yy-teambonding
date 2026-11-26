@@ -1,6 +1,7 @@
 // Client socket layer: reconnect with backoff, hello replay, clock offset from server timestamps.
 // No JSON pings: keep-alive is the runtime's raw ping/pong (uncounted); every JSON message costs budget.
 import type { ClientMsg, PlayerWireAction, HostAction, ServerMsg } from '@shared/protocol';
+import { ActBudget, localBudgetStore } from './actBudget';
 
 export type ClientHello = Extract<ClientMsg, { t: 'hello' | 'addSelf' | 'hostHello' }>;
 export type Intro = ClientHello | { t: 'peek' };
@@ -31,9 +32,11 @@ export interface NetOptions {
   WebSocketCtor?: typeof WebSocket;
   url?: string;
   visibility?: VisibilitySource;
+  /** R28 cap on every act frame. Defaults to one persisted in localStorage. */
+  budget?: ActBudget;
 }
 
-type Events = { [K in ServerMsg['type']]: Extract<ServerMsg, { type: K }> } & { close: CloseInfo; state: NetState; pong: null };
+type Events = { [K in ServerMsg['type']]: Extract<ServerMsg, { type: K }> } & { close: CloseInfo; state: NetState; pong: null; throttled: { type: string } };
 type Handler<T> = (m: T) => void;
 
 function defaultUrl(): string {
@@ -60,11 +63,14 @@ export class Net {
   private readonly url: string | undefined;
   private readonly vis: VisibilitySource | undefined;
   private visBound = false;
+  /** R28: every `act` frame is charged here; over the cap it is refused locally and never sent. */
+  readonly budget: ActBudget;
 
   constructor(opts: NetOptions = {}) {
     this.Ctor = opts.WebSocketCtor ?? WebSocket;
     this.url = opts.url;
     this.vis = opts.visibility;
+    this.budget = opts.budget ?? new ActBudget(localBudgetStore());
   }
 
   /** Opens a fresh socket (dropping any current one) and sends `intro` on open. Reconnects replay it. */
@@ -89,9 +95,17 @@ export class Net {
     this.open('reconnecting');
   }
 
-  /** Sends a raw client message if the socket is open. Returns false if it was dropped. */
+  /**
+   * Sends a raw client message if the socket is open. Returns false if it was dropped. This is the
+   * only way out for acts, so the R28 cap here covers every caller (`act()` included): an act over
+   * the cap emits 'throttled' and sends nothing. hello/addSelf/peek/host frames are not capped.
+   */
   send(msg: ClientMsg): boolean {
     if (!this.ws || this.ws.readyState !== 1) return false;
+    if (msg.t === 'act' && !this.budget.take(msg.a.type, Date.now())) {
+      this.emit('throttled', { type: msg.a.type });
+      return false;
+    }
     if (msg.t === 'hello' || msg.t === 'addSelf') this.introSentAt = Date.now();
     this.ws.send(JSON.stringify(msg));
     return true;

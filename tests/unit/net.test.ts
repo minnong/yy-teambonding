@@ -201,3 +201,31 @@ describe('Net heartbeat frames (fix round 1)', () => {
     expect(pongs).toBe(1);
   });
 });
+
+describe('Net act budget (R28)', () => {
+  const look = { skin: 0, hair: 0, hairColor: 0, top: 0, topColor: 0, bottomsColor: 0, accessory: 0 };
+  it('every act goes through the cap, including raw send({t:"act"}); over the cap nothing is sent', () => {
+    const { net } = mk();
+    net.connect(hello);
+    last().open();
+    const throttled: string[] = [];
+    net.on('throttled', (m) => throttled.push(m.type));
+    let ok = 0;
+    for (let i = 0; i < 30; i++) if (net.act({ type: 'emote', kind: 'wave' })) ok++;
+    expect(ok).toBe(17);
+    const before = last().sent.length;
+    expect(net.send({ t: 'act', a: { type: 'setLook', look } })).toBe(false);
+    expect(last().sent.length).toBe(before);
+    expect(throttled.length).toBe(14);
+    expect(net.act({ type: 'quizAnswer', choice: 1 })).toBe(true); // reserved slice
+  });
+  it('hello and host frames are outside the cap; a closed socket charges nothing', () => {
+    const { net } = mk();
+    expect(net.act({ type: 'emote', kind: 'wave' })).toBe(false); // not open: not charged
+    net.connect(hello);
+    last().open();
+    for (let i = 0; i < 17; i++) expect(net.act({ type: 'emote', kind: 'wave' })).toBe(true);
+    expect(net.send(hello)).toBe(true);
+    expect(net.host({ type: 'host.pause' })).toBe(true);
+  });
+});

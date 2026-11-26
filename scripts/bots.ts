@@ -17,6 +17,7 @@ import { positionAt } from '../src/shared/motion';
 import type { ClientMsg, PlayerWireAction, PublicSnapshot, ServerMsg } from '../src/shared/protocol';
 import type { AvatarLook, Motion, PlayerId, TeamId } from '../src/shared/types';
 import { AVATAR_OPTIONS } from '../src/shared/constants';
+import { ActBudget } from '../src/client/actBudget';
 
 type HostState = Extract<ServerMsg, { type: 'hostState' }>;
 
@@ -115,6 +116,8 @@ const teamPlaying = (team: TeamId) => world.snap?.teams[team]?.status === 'playi
 // ---------- bots ----------
 
 let botSent = 0;
+/** Acts the R28 client cap refused (each bot carries the same ActBudget a phone does). */
+let botRefused = 0;
 const sentByType = new Map<string, number>();
 const bots: Bot[] = [];
 
@@ -130,6 +133,7 @@ class Bot {
   id: PlayerId | null = null;
   ws: WebSocket | null = null;
   readonly token = crypto.randomUUID();
+  private readonly budget = new ActBudget();
   sent = 0;
   stopped = false;
   /** Busy until: an icebreaker partner or someone walking to their table stays put. */
@@ -151,7 +155,11 @@ class Bot {
     const kind = msg.t === 'act' ? msg.a.type : msg.t;
     sentByType.set(kind, (sentByType.get(kind) ?? 0) + 1);
   }
-  act(a: PlayerWireAction): void { this.send({ t: 'act', a }); }
+  act(a: PlayerWireAction): void {
+    if (this.stopped || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.budget.take(a.type, Date.now())) { botRefused++; return; }
+    this.send({ t: 'act', a });
+  }
 
   connect(): Promise<void> {
     this.joined = new Promise<void>((resolve, reject) => {
@@ -359,6 +367,7 @@ async function main(): Promise<void> {
   console.log('');
   console.log(`sent by bots: ${botSent}`);
   console.log(`bot messages by type: ${[...sentByType].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+  console.log(`refused locally by the R28 act cap: ${botRefused}`);
   console.log(`sent by host script in the window: ${hostInWindow}`);
   console.log(`server msgCount delta: ${delta}`);
   console.log(`projected 35-min messages: ${projected}`);

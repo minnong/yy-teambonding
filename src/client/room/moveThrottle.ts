@@ -18,12 +18,12 @@ export class MoveThrottle {
     private readonly maxPerWindow = MOVE_WINDOW_MAX,
   ) {}
 
-  /** Earliest time the next move may be sent. */
-  private allowedAt(): number {
+  /** Earliest time the next move may be sent, never before `notBefore` (the shared act budget, R28). */
+  private allowedAt(notBefore = -Infinity): number {
     const lastSent = this.sent.at(-1);
     const byGap = lastSent === undefined ? -Infinity : lastSent + this.gapMs;
     const byWindow = this.sent.length >= this.maxPerWindow ? this.sent[this.sent.length - this.maxPerWindow]! + this.windowMs : -Infinity;
-    return Math.max(byGap, byWindow);
+    return Math.max(byGap, byWindow, notBefore);
   }
 
   private record(now: number): void {
@@ -32,20 +32,20 @@ export class MoveThrottle {
   }
 
   /** A tap: returns the target to send now, or null if it was queued as the trailing move. */
-  request(to: Vec, now: number): Vec | null {
-    if (this.pending === null && now >= this.allowedAt()) { this.record(now); return to; }
+  request(to: Vec, now: number, notBefore = -Infinity): Vec | null {
+    if (this.pending === null && now >= this.allowedAt(notBefore)) { this.record(now); return to; }
     this.pending = to;
     return null;
   }
 
   /** When the queued move may go, or null if nothing is queued. */
-  nextAt(): number | null {
-    return this.pending === null ? null : this.allowedAt();
+  nextAt(notBefore = -Infinity): number | null {
+    return this.pending === null ? null : this.allowedAt(notBefore);
   }
 
   /** Returns the queued target if it may be sent at `now` (and records it), else null. */
-  flush(now: number): Vec | null {
-    if (this.pending === null || now < this.allowedAt()) return null;
+  flush(now: number, notBefore = -Infinity): Vec | null {
+    if (this.pending === null || now < this.allowedAt(notBefore)) return null;
     const to = this.pending;
     this.pending = null;
     this.record(now);
