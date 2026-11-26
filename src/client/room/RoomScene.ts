@@ -344,7 +344,11 @@ function el(cls: string, id: string): HTMLDivElement {
  * Mounts the room into #app: `#lb-room` holds the canvas, `#lb-hud` (above it, pointer-events off
  * except on its children) is where Task 11 mounts DOM overlays.
  */
-export function startRoom(net: Net, me: Me, snapshot: PublicSnapshot): RoomApi {
+export function startRoom(
+  net: Net, me: Me, snapshot: PublicSnapshot,
+  /** Applied to every incoming snapshot, e.g. to keep my pending look (I1) while the server catches up. */
+  patch: (s: PublicSnapshot) => PublicSnapshot = (s) => s,
+): RoomApi {
   const app = document.querySelector<HTMLElement>('#app')!;
   app.replaceChildren();
   const host = el('lb-room', 'lb-room');
@@ -395,8 +399,8 @@ export function startRoom(net: Net, me: Me, snapshot: PublicSnapshot): RoomApi {
   });
   const unsubs = [
     detachKeys,
-    net.on('snapshot', (m) => scene.setSnapshot(m.snapshot)),
-    net.on('welcome', (m) => scene.setSnapshot(m.snapshot)), // reconnect: full state
+    net.on('snapshot', (m) => scene.setSnapshot(patch(m.snapshot))),
+    net.on('welcome', (m) => scene.setSnapshot(patch(m.snapshot))), // reconnect: full state
     net.on('motion', (m) => scene.setMotion(m.playerId, m.motion)),
   ];
 

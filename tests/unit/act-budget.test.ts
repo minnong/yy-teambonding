@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   ActBudget, ACT_CAP, ACT_RESERVED, ACT_WINDOW_MS, RESERVED_TYPES, SESSION_WORST_CASE,
+  JOIN_LOOK_MAX, JOIN_LOOK_WINDOW_MS,
 } from '../../src/client/actBudget';
 
 const MIN = 60_000;
@@ -11,8 +12,10 @@ describe('ActBudget (R28)', () => {
     expect(ACT_WINDOW_MS).toBe(MIN);
     expect(ACT_RESERVED).toBe(3);
     expect([...RESERVED_TYPES].sort()).toEqual(['icebreakerConfirm', 'quizAnswer']);
-    // 36 players × 36 window positions in 35 min × 20, plus joins (216) and the host (50)
-    expect(SESSION_WORST_CASE).toBe(36 * 36 * 20 + 216 + 50);
+    // 36 players × 36 window positions in 35 min × 20, plus joins (216), the cap-exempt
+    // join looks (36 × 3 = 108, I1) and the host (50)
+    expect(SESSION_WORST_CASE).toBe(36 * 36 * 20 + 216 + 36 * JOIN_LOOK_MAX + 50);
+    expect(SESSION_WORST_CASE).toBe(26_294);
     expect(SESSION_WORST_CASE).toBeLessThanOrEqual(27_000);
   });
 
@@ -82,5 +85,36 @@ describe('ActBudget (R28)', () => {
     const b = new ActBudget(store);
     expect(b.take('emote', 100)).toBe(false);
     expect(b.take('quizAnswer', 100)).toBe(true);
+  });
+});
+
+describe('ActBudget join look (I1)', () => {
+  const MIN35 = 35 * MIN;
+  it('a join setLook is never refused by the act cap, up to JOIN_LOOK_MAX per session', () => {
+    expect(JOIN_LOOK_MAX).toBe(3);
+    expect(JOIN_LOOK_WINDOW_MS).toBe(MIN35);
+    const b = new ActBudget();
+    for (let i = 0; i < ACT_CAP; i++) b.take('quizAnswer', 0); // cap exhausted
+    expect(b.take('setLook', 0)).toBe(false);
+    expect(b.takeJoinLook(0)).toBe(true);
+    expect(b.takeJoinLook(1)).toBe(true);
+    expect(b.takeJoinLook(2)).toBe(true);
+    expect(b.takeJoinLook(3)).toBe(false); // allowance used: back to the ordinary cap
+    expect(b.takeJoinLook(MIN35 + 1)).toBe(true); // a fresh session window
+    // exempt sends charge nothing to the ordinary cap
+    const c = new ActBudget();
+    c.takeJoinLook(0);
+    let ok = 0;
+    for (let i = 0; i < 30; i++) if (c.take('emote', 0)) ok++;
+    expect(ok).toBe(ACT_CAP - ACT_RESERVED);
+  });
+
+  it('the join-look allowance survives a reload through its store', () => {
+    let saved: number[] = [];
+    const store = { load: () => saved, save: (c: number[]) => { saved = [...c]; } };
+    const a = new ActBudget(null, store);
+    for (let i = 0; i < JOIN_LOOK_MAX; i++) expect(a.takeJoinLook(i)).toBe(true);
+    const b = new ActBudget(null, store);
+    expect(b.takeJoinLook(10)).toBe(false);
   });
 });

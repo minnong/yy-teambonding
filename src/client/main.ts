@@ -12,6 +12,7 @@ import { mountRoomUi } from './ui/hud';
 import type { RoomUi } from './ui/hud';
 import type { RoomApi } from './room/RoomScene';
 import type { PublicSnapshot } from '@shared/protocol';
+import { PendingLook } from './pendingLook';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 const net = new Net();
@@ -25,6 +26,10 @@ let overlay: HTMLElement | null = null;
 let entered = false;
 let building = false;
 let builder: { close(): void } | null = null;
+/** The newest snapshot seen after a welcome (the builder may stay open for minutes). */
+let latest: PublicSnapshot | null = null;
+/** I1: the builder's look, resent on welcome/snapshot until the server shows it. Cap-exempt. */
+const pendingLook = new PendingLook((look) => net.sendJoinLook(look));
 /** The live room and its HUD, kept so both can be torn down. */
 let room: { scene: RoomApi; ui: RoomUi } | null = null;
 
@@ -106,7 +111,11 @@ function forgetMe(): void {
   else showPicker();
 }
 
-net.on('snapshot', (m) => { roster = m.snapshot; });
+net.on('snapshot', (m) => {
+  roster = m.snapshot;
+  latest = m.snapshot;
+  if (me) pendingLook.onSnapshot(m.snapshot, me.playerId);
+});
 net.on('nameTaken', (m) => showNameTaken(m.playerId));
 net.on('kicked', () => { if (entered || me) showKicked(); });
 net.on('close', ({ code }) => {
@@ -124,13 +133,15 @@ net.on('welcome', (m) => {
   me = mine;
   saveMe(mine);
   net.remember({ t: 'hello', playerId: mine.playerId, token: mine.token }); // reconnects never carry takeover
+  latest = m.snapshot;
+  pendingLook.onWelcome(m.snapshot, mine.playerId); // a reconnect: resend a look the server never got
   hideOverlay();
   picker?.destroy();
   picker = null;
   if (entered || building) return; // a reconnect welcome: the room scene listens to the net itself
   const enter = (snap: PublicSnapshot) => {
     entered = true;
-    const scene = startRoom(net, mine, snap);
+    const scene = startRoom(net, mine, snap, (s) => pendingLook.patch(s, mine.playerId));
     room = { scene, ui: mountRoomUi(net, mine, scene, store, snap) };
   };
   if (m.snapshot.players[mine.playerId]?.look) { enter(m.snapshot); return; }
@@ -138,9 +149,8 @@ net.on('welcome', (m) => {
   builder = openAvatarBuilder(null, (look) => {
     building = false;
     builder = null;
-    net.act({ type: 'setLook', look });
-    const p = m.snapshot.players[mine.playerId];
-    enter(p ? { ...m.snapshot, players: { ...m.snapshot.players, [p.id]: { ...p, look } } } : m.snapshot);
+    pendingLook.set(look);
+    enter(pendingLook.patch(latest ?? m.snapshot, mine.playerId));
   });
 });
 

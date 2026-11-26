@@ -1,6 +1,7 @@
 // Client socket layer: reconnect with backoff, hello replay, clock offset from server timestamps.
 // No JSON pings: keep-alive is the runtime's raw ping/pong (uncounted); every JSON message costs budget.
 import type { ClientMsg, PlayerWireAction, HostAction, ServerMsg } from '@shared/protocol';
+import type { AvatarLook } from '@shared/types';
 import { ActBudget, localBudgetStore } from './actBudget';
 
 export type ClientHello = Extract<ClientMsg, { t: 'hello' | 'addSelf' | 'hostHello' }>;
@@ -70,7 +71,7 @@ export class Net {
     this.Ctor = opts.WebSocketCtor ?? WebSocket;
     this.url = opts.url;
     this.vis = opts.visibility;
-    this.budget = opts.budget ?? new ActBudget(localBudgetStore());
+    this.budget = opts.budget ?? new ActBudget(localBudgetStore(), localBudgetStore('lobby.joinLookBudget'));
   }
 
   /** Opens a fresh socket (dropping any current one) and sends `intro` on open. Reconnects replay it. */
@@ -111,6 +112,16 @@ export class Net {
     return true;
   }
   act(a: PlayerWireAction): boolean { return this.send({ t: 'act', a }); }
+  /**
+   * The setLook that completes a join (I1). Never refused by the act cap while the small join-look
+   * allowance lasts (ActBudget.takeJoinLook); after that it is an ordinary, capped act.
+   */
+  sendJoinLook(look: AvatarLook): boolean {
+    if (!this.ws || this.ws.readyState !== 1) return false;
+    if (!this.budget.takeJoinLook(Date.now())) return this.act({ type: 'setLook', look });
+    this.ws.send(JSON.stringify({ t: 'act', a: { type: 'setLook', look } } satisfies ClientMsg));
+    return true;
+  }
   /**
    * Raw keep-alive probe. The Room answers `ping` with `pong` via setWebSocketAutoResponse, so it
    * is not counted in msgCount and does not wake the object. Emits 'pong' when the answer comes.

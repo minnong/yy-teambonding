@@ -229,3 +229,18 @@ describe('Net act budget (R28)', () => {
     expect(net.host({ type: 'host.pause' })).toBe(true);
   });
 });
+
+describe('Net join look (I1)', () => {
+  const look = { skin: 0, hair: 0, hairColor: 0, top: 0, topColor: 0, bottomsColor: 0, accessory: 0 };
+  it('sendJoinLook goes out even when the act cap is spent; false when not open', () => {
+    const { net } = mk();
+    expect(net.sendJoinLook(look)).toBe(false);
+    net.connect(hello);
+    last().open();
+    for (let i = 0; i < 30; i++) net.act({ type: 'quizAnswer', choice: 0 });
+    expect(net.act({ type: 'setLook', look })).toBe(false);
+    expect(net.sendJoinLook(look)).toBe(true);
+    expect(JSON.parse(last().sent.at(-1)!)).toEqual({ t: 'act', a: { type: 'setLook', look } });
+  });
+});
+
