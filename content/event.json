@@ -318,14 +318,26 @@
         "comb",
         "a comb",
         "zip",
-        "zipper"
+        "zipper",
+        "saw",
+        "a saw",
+        "gear",
+        "a gear",
+        "cog",
+        "a cog"
       ]
     },
     {
       "q": "What has an eye but cannot see?",
       "answers": [
         "needle",
-        "a needle"
+        "a needle",
+        "storm",
+        "a storm",
+        "hurricane",
+        "a hurricane",
+        "potato",
+        "a potato"
       ]
     },
     {
@@ -382,7 +394,11 @@
       "answers": [
         "book",
         "a book",
-        "books"
+        "books",
+        "newspaper",
+        "a newspaper",
+        "dictionary",
+        "a dictionary"
       ]
     },
     {
@@ -531,7 +547,11 @@
         "answers": [
           "keyboard",
           "a keyboard",
-          "computer keyboard"
+          "computer keyboard",
+          "computer",
+          "a computer",
+          "laptop",
+          "a laptop"
         ]
       },
       {

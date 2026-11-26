@@ -9,7 +9,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "deploy": "vite build && wrangler deploy",
-    "bots": "tsx scripts/bots.ts"
+    "bots": "tsx scripts/bots.ts",
+    "check-content": "tsx scripts/check-content.ts"
   },
   "dependencies": {
     "phaser": "^3.90.0",

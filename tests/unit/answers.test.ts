@@ -36,3 +36,25 @@ describe('answers', () => {
     expect(matchesAnswer('piano', [])).toBe(false);
   });
 });
+
+describe('answers: typographic dashes (iOS Smart Punctuation)', () => {
+  it('en, em, figure, minus and other Unicode dashes count as spaces like "-"', () => {
+    for (const d of ['\u2010', '\u2011', '\u2012', '\u2013', '\u2014', '\u2015', '\u2212']) {
+      expect(matchesAnswer(`ice${d}cream`, ['ice cream'])).toBe(true);
+      expect(matchesAnswer(`foot${d}steps`, ['foot-steps'])).toBe(true);
+    }
+  });
+});
+
+describe('answers: riddle alternates (T2)', () => {
+  it('common valid answers are accepted', async () => {
+    const { loadContent } = await import('@shared/content');
+    const c = loadContent();
+    const riddle = (start: string) => c.riddles.find((r) => r.q.startsWith(start))!.answers;
+    for (const a of ['saw', 'gear', 'a cog', 'comb']) expect(matchesAnswer(a, riddle('What has teeth'))).toBe(true);
+    for (const a of ['storm', 'a hurricane', 'potato', 'needle']) expect(matchesAnswer(a, riddle('What has an eye'))).toBe(true);
+    for (const a of ['newspaper', 'a dictionary', 'book']) expect(matchesAnswer(a, riddle('What has words'))).toBe(true);
+    for (const a of ['computer', 'a laptop', 'keyboard']) expect(matchesAnswer(a, c.boss.steps[0]!.answers)).toBe(true);
+  });
+});
+
