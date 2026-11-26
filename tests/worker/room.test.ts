@@ -145,11 +145,30 @@ describe('room: hello and sessions', () => {
     expect((await c.next('error')).message).toBe('say hello first');
     hostDo(c, { type: 'host.pause' });
     expect((await c.next('error')).message).toBe('say hello first');
-    // peek (Task 9) is allowed before hello and is ignored for now
+    // peek is allowed before hello (and replies with a snapshot, see the peek test)
     c.send({ t: 'peek' });
     c.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01') });
     await c.next('welcome');
     expect(c.all('error')).toHaveLength(2);
+  });
+
+  it('peek returns snapshot without connecting a player', async () => {
+    const stub = freshRoom();
+    const c = await connect(stub);
+    c.send({ t: 'peek' });
+    const m = await c.next('snapshot');
+    expect(m.snapshot.teamOrder.length).toBeGreaterThan(0);
+    expect(Object.keys(m.snapshot.players).length).toBeGreaterThan(0);
+    expect(Object.values(m.snapshot.online).some(Boolean)).toBe(false);
+    // a peek-only socket is not identified: it gets no later broadcasts
+    const p = await player(stub, 'p01');
+    await sync(p);
+    await barrier(c);
+    expect(c.all('snapshot')).toHaveLength(1);
+    // and it may still say hello afterwards
+    c.send({ t: 'hello', playerId: 'p02', token: tokenOf('p02') });
+    expect((await c.next('welcome')).you).toBe('p02');
+    expect(c.all('error')).toHaveLength(1); // only the barrier's
   });
 
   it('second device with different token gets nameTaken; takeover kicks the first', async () => {

@@ -170,7 +170,7 @@ export const ClientMsgSchema = z.discriminatedUnion('t', [
   z.strictObject({ t: z.literal('hello'), playerId: id, token, takeover: z.boolean().optional() }),
   z.strictObject({ t: z.literal('addSelf'), name: z.string().max(MAX_NAME_LEN), teamId: id, token }),
   z.strictObject({ t: z.literal('hostHello'), pin: z.string().max(MAX_ID_LEN) }),
-  /** Task 9: a pre-hello roster peek. Accepted and ignored until then. */
+  /** Pre-hello roster peek: replies `snapshot` to the sender only; attaches no identity. */
   z.strictObject({ t: z.literal('peek') }),
   z.strictObject({ t: z.literal('act'), a: PlayerWireActionSchema }),
   z.strictObject({ t: z.literal('host'), a: HostActionSchema }),

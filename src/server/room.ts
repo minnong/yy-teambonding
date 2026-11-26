@@ -136,7 +136,11 @@ export class Room extends DurableObject<Env> {
     if (!msg) { sendError(ws, 'bad message'); return; }
     const att = attachmentOf(ws);
     switch (msg.t) {
-      case 'peek': return; // Task 9
+      case 'peek':
+        // Roster preview for the name picker: snapshot to this socket only. No identity is attached,
+        // so a peek-only socket is never in a broadcast ('all' reaches identified sockets only).
+        send(ws, { type: 'snapshot', snapshot: publicSnapshot(this.game, this.ctxAt(now)) });
+        return;
       case 'hello':
         if (att) { sendError(ws, 'already said hello'); return; }
         return this.hello(ws, msg.playerId, msg.token, msg.takeover === true, now);
