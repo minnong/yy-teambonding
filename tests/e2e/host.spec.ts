@@ -99,7 +99,7 @@ test('host: wrong PIN is cleared and shown', async ({ page }) => {
 test('host: people panel moves a player in warm-up only', async ({ page }) => {
   await openHost(page);
   await page.getByRole('tab', { name: 'People' }).click();
-  await page.getByLabel('Move Player 01 to another team').selectOption('pixel');
+  await page.getByLabel('Move Ray to another team').selectOption('pixel');
   await expect(page.locator('.h-team-head', { hasText: 'Pixel' })).toHaveText('Pixel 0/6');
   await expect(page.locator('.h-team-head', { hasText: 'Otter' })).toHaveText('Otter 0/4');
   await expect(page.getByLabel('Goes first')).toHaveValue('otter');

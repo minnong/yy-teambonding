@@ -85,10 +85,14 @@ describe('game core: players', () => {
 
   it('addSelf refuses a duplicate name in the same team', () => {
     const s = room();
-    const r = run(s, { type: 'addSelf', name: 'player 01', teamId: 'otter' }, 2000);
+    // use whoever is in slot p01 (an otter player), so a real roster doesn't break this test
+    const existing = content.players.find((p) => p.id === 'p01')!;
+    const shouty = `  ${existing.name.toUpperCase()} `;
+    const r = run(s, { type: 'addSelf', name: shouty, teamId: existing.teamId }, 2000);
     expect(r.error).toBe('That name is already on the list');
     // same name on another team is fine
-    expect(run(s, { type: 'addSelf', name: 'player 01', teamId: 'pixel' }, 2000).error).toBeUndefined();
+    const other = content.teams.find((t) => t.id !== existing.teamId)!.id;
+    expect(run(s, { type: 'addSelf', name: shouty, teamId: other }, 2000).error).toBeUndefined();
   });
 
   it('move produces a motion message whose path starts at the current interpolated position', () => {
