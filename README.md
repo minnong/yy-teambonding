@@ -34,7 +34,9 @@ Edit `content/event.json`:
 
 The same file also holds the icebreakers, riddles, quiz questions and the final boss puzzle. Then run `npm run check-content`. It checks the file the way the server will and lists each team's size. Then run `npm run deploy`. Deploy runs the same check first and stops if the file has a problem, so a typo can't break the live site.
 
-`npm test` is for developers. Its tests are written against the placeholder roster (Player 01 to Player 36), so it can fail once you put in the real names. That does not mean the file is wrong.
+**After deploying a new roster, press Reset on the host page** (Scores tab, Danger zone). The room keeps the roster it already has saved, so the new names and teams only appear after a Reset. Do this before the event, never during it.
+
+`npm test` is for developers. It uses its own copy of the placeholder roster, so it keeps passing whatever you put in `content/event.json`.
 
 ## 3. Optional: your own domain
 
@@ -45,7 +47,7 @@ The domain must already be on Cloudflare. In the Cloudflare dashboard, open Work
 Fill the room with 35 fake players:
 
 ```
-npm run bots -- --url https://team-lobby.<account>.workers.dev --allow-remote --bots 35 --minutes 5 --pin <your pin> --reset --start
+npm run bots -- --url https://yuanyang.minn.codes --allow-remote --bots 35 --minutes 5 --pin <your pin> --reset --start
 ```
 
 - It only works while the room is in warm-up. If the event has started, the bots refuse and do nothing.
