@@ -32,7 +32,7 @@ Edit `content/event.json`:
 }
 ```
 
-The same file also holds the icebreakers, riddles, quiz questions and the final boss puzzle. Then run `npm run check-content`. It checks the file the way the server will and lists each team's size. Then run `npm run deploy`.
+The same file also holds the icebreakers, riddles, quiz questions and the final boss puzzle. Then run `npm run check-content`. It checks the file the way the server will and lists each team's size. Then run `npm run deploy`. Deploy runs the same check first and stops if the file has a problem, so a typo can't break the live site.
 
 `npm test` is for developers. Its tests are written against the placeholder roster (Player 01 to Player 36), so it can fail once you put in the real names. That does not mean the file is wrong.
 
