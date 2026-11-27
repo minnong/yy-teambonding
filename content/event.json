@@ -66,12 +66,12 @@
     },
     {
       "id": "p05",
-      "name": "Yu Xuan",
+      "name": "Yuxuan",
       "teamId": "otter"
     },
     {
       "id": "p06",
-      "name": "Chiao Hao",
+      "name": "Chianhao",
       "teamId": "pixel"
     },
     {
@@ -106,7 +106,7 @@
     },
     {
       "id": "p13",
-      "name": "Hou Ren",
+      "name": "Houren",
       "teamId": "comet"
     },
     {
@@ -116,7 +116,7 @@
     },
     {
       "id": "p15",
-      "name": "Koozy",
+      "name": "Zhengyu",
       "teamId": "comet"
     },
     {
@@ -201,7 +201,7 @@
     },
     {
       "id": "p32",
-      "name": "Kah Chee",
+      "name": "Kahchee",
       "teamId": "maple"
     },
     {
@@ -221,7 +221,7 @@
     },
     {
       "id": "p36",
-      "name": "Chuan Kai",
+      "name": "Chuankai",
       "teamId": "maple"
     }
   ],
