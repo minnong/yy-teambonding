@@ -1,0 +1,4 @@
+# Local development only. Copy to .dev.vars (gitignored): cp .dev.vars.example .dev.vars
+# `npm run dev`, `npx playwright test` and the local bots use this PIN for /host.
+# The deployed event uses its own secret: npx wrangler secret put HOST_PIN
+HOST_PIN=1234

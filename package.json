@@ -1,0 +1,35 @@
+{
+  "name": "team-lobby",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "pretest": "vite build --logLevel error",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run check-content && vite build && wrangler deploy",
+    "bots": "tsx scripts/bots.ts",
+    "check-content": "tsx scripts/check-content.ts"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0",
+    "qrcode": "^1.5.4",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.70.2",
+    "@cloudflare/vitest-plugin": "^1.9.2",
+    "@cloudflare/workers-types": "^5.20261125.1",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^26.6.11",
+    "@types/pngjs": "^6.0.5",
+    "@types/qrcode": "^1.5.6",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^4.1.12",
+    "wrangler": "^4.168.0"
+  }
+}

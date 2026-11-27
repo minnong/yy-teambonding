@@ -1,0 +1,162 @@
+import './styles.css';
+import { Net } from './net';
+import type { ClientHello } from './net';
+import { openAvatarBuilder } from './join/avatarBuilder';
+import { showNamePicker } from './join/namePicker';
+import type { PickerView } from './join/namePicker';
+import { browserToken, clearMe, loadMe, saveMe } from './identity';
+import type { Me } from './identity';
+import { startRoom } from './room/RoomScene';
+import { UiStore } from './ui/store';
+import { mountRoomUi } from './ui/hud';
+import type { RoomUi } from './ui/hud';
+import type { RoomApi } from './room/RoomScene';
+import type { PublicSnapshot } from '@shared/protocol';
+import { PendingLook } from './pendingLook';
+
+const app = document.querySelector<HTMLElement>('#app')!;
+const net = new Net();
+// Subscribed before any hello, so the riddle/boss catch-up after `welcome` is kept even mid-builder.
+const store = new UiStore(net);
+
+let me: Me | null = loadMe();
+let picker: PickerView | null = null;
+let roster: PublicSnapshot | null = null;
+let overlay: HTMLElement | null = null;
+let entered = false;
+let building = false;
+let builder: { close(): void } | null = null;
+/** The newest snapshot seen after a welcome (the builder may stay open for minutes). */
+let latest: PublicSnapshot | null = null;
+/** I1: the builder's look, resent on welcome/snapshot until the server shows it. Cap-exempt. */
+const pendingLook = new PendingLook((look) => net.sendJoinLook(look));
+/** The live room and its HUD, kept so both can be torn down. */
+let room: { scene: RoomApi; ui: RoomUi } | null = null;
+
+function leaveRoom(): void {
+  room?.ui.destroy();
+  room?.scene.destroy();
+  room = null;
+}
+
+function mk<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function hideOverlay(): void { overlay?.remove(); overlay = null; }
+function showOverlay(...children: HTMLElement[]): void {
+  hideOverlay();
+  const screen = mk('div', 'lb-screen');
+  screen.replaceChildren(...children);
+  overlay = mk('div', 'lb-overlay');
+  overlay.appendChild(screen);
+  document.body.appendChild(overlay);
+}
+
+function showStatus(text: string): void {
+  const p = mk('p', 'lb-center', text);
+  app.replaceChildren(p);
+}
+
+function showPicker(): void {
+  hideOverlay();
+  picker?.destroy();
+  net.connect({ t: 'peek' });
+  picker = showNamePicker(app, net, {
+    onPick: (playerId) => join({ t: 'hello', playerId, token: browserToken() }),
+    onAddSelf: (name, teamId) => {
+      if (!net.send({ t: 'addSelf', name, teamId, token: browserToken() })) picker?.showError('Not connected yet, try again');
+    },
+  });
+}
+
+function join(hello: ClientHello): void {
+  if (hello.t === 'hello') me = { playerId: hello.playerId, token: hello.token };
+  net.connect(hello);
+}
+
+function takeoverHello(): ClientHello | null {
+  return me ? { t: 'hello', playerId: me.playerId, token: me.token, takeover: true } : null;
+}
+
+function showKicked(): void {
+  if (building) { builder?.close(); builder = null; building = false; } // the takeover screen must not hide under the builder
+  showOverlay(
+    mk('h1', '', 'You opened the lobby somewhere else'),
+    (() => {
+      const b = mk('button', 'lb-add', 'Use this device');
+      b.addEventListener('click', () => { const h = takeoverHello(); if (h) net.connect(h); });
+      return b;
+    })(),
+  );
+}
+
+function showNameTaken(playerId: string): void {
+  const name = roster?.players[playerId]?.name ?? 'This name';
+  const take = mk('button', 'lb-add', 'Is this you? Take over.');
+  take.addEventListener('click', () => net.connect({ t: 'hello', playerId, token: browserToken(), takeover: true }));
+  const back = mk('button', 'lb-back', 'Back');
+  back.addEventListener('click', () => showPicker());
+  showOverlay(mk('p', '', `${name} is already in the lobby on another device.`), take, back);
+}
+
+/** The stored identity is stale (host reset or removed): forget it and start over. */
+function forgetMe(): void {
+  clearMe();
+  me = null;
+  if (entered || building) { leaveRoom(); location.reload(); }
+  else showPicker();
+}
+
+net.on('snapshot', (m) => {
+  roster = m.snapshot;
+  latest = m.snapshot;
+  if (me) pendingLook.onSnapshot(m.snapshot, me.playerId);
+});
+net.on('nameTaken', (m) => showNameTaken(m.playerId));
+net.on('kicked', () => { if (entered || me) showKicked(); });
+net.on('close', ({ code }) => {
+  if (code === 4000) showKicked();
+  else if (code === 4003) forgetMe();
+});
+net.on('error', (m) => {
+  if (m.message === 'unknown player') forgetMe();
+  else if (picker) picker.showError(m.message);
+  else if (!entered) console.warn('server error:', m.message); // in the room the HUD toasts it
+});
+
+net.on('welcome', (m) => {
+  const mine: Me = { playerId: m.you, token: m.token };
+  me = mine;
+  saveMe(mine);
+  net.remember({ t: 'hello', playerId: mine.playerId, token: mine.token }); // reconnects never carry takeover
+  latest = m.snapshot;
+  pendingLook.onWelcome(m.snapshot, mine.playerId); // a reconnect: resend a look the server never got
+  hideOverlay();
+  picker?.destroy();
+  picker = null;
+  if (entered || building) return; // a reconnect welcome: the room scene listens to the net itself
+  const enter = (snap: PublicSnapshot) => {
+    entered = true;
+    const scene = startRoom(net, mine, snap, (s) => pendingLook.patch(s, mine.playerId));
+    room = { scene, ui: mountRoomUi(net, mine, scene, store, snap) };
+  };
+  if (m.snapshot.players[mine.playerId]?.look) { enter(m.snapshot); return; }
+  building = true;
+  builder = openAvatarBuilder(null, (look) => {
+    building = false;
+    builder = null;
+    pendingLook.set(look);
+    enter(pendingLook.patch(latest ?? m.snapshot, mine.playerId));
+  });
+});
+
+if (me) {
+  showStatus('Connecting…');
+  net.connect({ t: 'hello', playerId: me.playerId, token: me.token });
+} else {
+  showPicker();
+}
