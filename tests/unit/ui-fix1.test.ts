@@ -11,7 +11,7 @@ const team = (id: string, extra: Partial<Team> = {}): Team => ({
 const quiz = { q: 'Capital?', choices: ['A', 'B', 'C', 'D'], endsAt: 50_000 };
 function snap(extra: Partial<PublicSnapshot> = {}): PublicSnapshot {
   return {
-    phase: 'competition', paused: false, teamOrder: ['pixel', 'otter'],
+    epoch: 'e-test', phase: 'competition', paused: false, teamOrder: ['pixel', 'otter'],
     teams: { pixel: team('pixel'), otter: team('otter') },
     players: { me: { id: 'me', name: 'Mia', teamId: 'pixel', look: null, addedOnDay: false, removed: false } },
     motions: {}, online: { me: true }, collectibles: [], departures: [], lastCallAt: null,

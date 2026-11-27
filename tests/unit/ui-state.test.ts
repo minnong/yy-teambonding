@@ -17,7 +17,7 @@ const player = (id: string, teamId: string, name = id): Player =>
 
 function snap(extra: Partial<PublicSnapshot> = {}): PublicSnapshot {
   return {
-    phase: 'competition', paused: false, teamOrder: ['otter', 'pixel', 'comet'],
+    epoch: 'e-test', phase: 'competition', paused: false, teamOrder: ['otter', 'pixel', 'comet'],
     teams: { otter: team('otter'), pixel: team('pixel'), comet: team('comet') },
     players: { me: player('me', 'pixel', 'Mia'), bo: player('bo', 'otter', 'Bo'), cy: player('cy', 'pixel', 'Cy') },
     motions: {}, online: { me: true, bo: true, cy: true }, collectibles: [], departures: [],

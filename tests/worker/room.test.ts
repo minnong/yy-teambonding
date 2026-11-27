@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers';
 import { SELF, evictDurableObject, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ServerMsg } from '@shared/protocol';
-import type { Persisted } from '@shared/game/index';
+import { persistable, type Persisted } from '@shared/game/index';
 import { loadContent } from '@shared/content';
 import type { Room } from '../../src/server/room';
 
@@ -77,9 +77,26 @@ async function connect(stub: Stub | null = null): Promise<Client> {
 
 const tokenOf = (id: string) => `token-${id}-0000`;
 
-async function player(stub: Stub, playerId: string, token = tokenOf(playerId)): Promise<Client> {
+/** The room's current epoch, read the way the name picker does: from a peek on its own socket. */
+async function epochOf(stub: Stub | null): Promise<string> {
   const c = await connect(stub);
-  c.send({ t: 'hello', playerId, token });
+  c.send({ t: 'peek' });
+  const { snapshot } = await c.next('snapshot');
+  c.close();
+  return snapshot.epoch;
+}
+
+/** Peeks on `c` (as the picker does) and says hello with that snapshot's epoch. */
+async function peekHello(c: Client, playerId: string, token: string, extra: { takeover?: boolean } = {}): Promise<void> {
+  c.send({ t: 'peek' });
+  const { snapshot } = await c.next('snapshot');
+  c.send({ t: 'hello', playerId, token, epoch: snapshot.epoch, ...extra });
+}
+
+async function player(stub: Stub, playerId: string, token = tokenOf(playerId), epoch?: string): Promise<Client> {
+  const e = epoch ?? await epochOf(stub);
+  const c = await connect(stub);
+  c.send({ t: 'hello', playerId, token, epoch: e });
   await c.next('welcome');
   return c;
 }
@@ -117,7 +134,7 @@ async function sync(c: Client) {
 describe('room: hello and sessions', () => {
   it('hello with roster id gets welcome with snapshot', async () => {
     const c = await connect(); // through the Worker's /ws route
-    c.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01') });
+    await peekHello(c, 'p01', tokenOf('p01'));
     const w = await c.next('welcome');
     expect(w.you).toBe('p01');
     expect(w.token).toBe(tokenOf('p01'));
@@ -128,12 +145,18 @@ describe('room: hello and sessions', () => {
 
     const stub = freshRoom();
     const u = await connect(stub);
-    u.send({ t: 'hello', playerId: 'nobody', token: tokenOf('x') });
+    const epoch = await epochOf(stub);
+    u.send({ t: 'hello', playerId: 'nobody', token: tokenOf('x'), epoch });
     expect((await u.next('error')).message).toBe('unknown player');
     // the token must be a string of 8-64 characters
-    u.send({ t: 'hello', playerId: 'p01', token: 'short' });
+    u.send({ t: 'hello', playerId: 'p01', token: 'short', epoch });
     expect((await u.next('error')).message).toBe('bad message');
-    u.send({ t: 'hello', playerId: 'p01', token: 'x'.repeat(65) });
+    u.send({ t: 'hello', playerId: 'p01', token: 'x'.repeat(65), epoch });
+    expect((await u.next('error')).message).toBe('bad message');
+    // the epoch is an id: 1-64 characters
+    u.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01'), epoch: '' });
+    expect((await u.next('error')).message).toBe('bad message');
+    u.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01'), epoch: 'e'.repeat(65) });
     expect((await u.next('error')).message).toBe('bad message');
     expect(u.all('welcome')).toEqual([]);
   });
@@ -146,8 +169,7 @@ describe('room: hello and sessions', () => {
     hostDo(c, { type: 'host.pause' });
     expect((await c.next('error')).message).toBe('say hello first');
     // peek is allowed before hello (and replies with a snapshot, see the peek test)
-    c.send({ t: 'peek' });
-    c.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01') });
+    await peekHello(c, 'p01', tokenOf('p01'));
     await c.next('welcome');
     expect(c.all('error')).toHaveLength(2);
   });
@@ -166,7 +188,7 @@ describe('room: hello and sessions', () => {
     await barrier(c);
     expect(c.all('snapshot')).toHaveLength(1);
     // and it may still say hello afterwards
-    c.send({ t: 'hello', playerId: 'p02', token: tokenOf('p02') });
+    c.send({ t: 'hello', playerId: 'p02', token: tokenOf('p02'), epoch: m.snapshot.epoch });
     expect((await c.next('welcome')).you).toBe('p02');
     expect(c.all('error')).toHaveLength(1); // only the barrier's
   });
@@ -175,12 +197,13 @@ describe('room: hello and sessions', () => {
     const stub = freshRoom();
     const a = await player(stub, 'p01', 'device-a-token');
     const b = await connect(stub);
-    b.send({ t: 'hello', playerId: 'p01', token: 'device-b-token' });
+    const epoch = a.all('welcome')[0]!.snapshot.epoch;
+    b.send({ t: 'hello', playerId: 'p01', token: 'device-b-token', epoch });
     expect(await b.next('nameTaken')).toEqual({ type: 'nameTaken', playerId: 'p01' });
     await sync(a);
     expect(a.all('kicked')).toEqual([]);
 
-    b.send({ t: 'hello', playerId: 'p01', token: 'device-b-token', takeover: true });
+    b.send({ t: 'hello', playerId: 'p01', token: 'device-b-token', takeover: true, epoch });
     const w = await b.next('welcome');
     expect(w.you).toBe('p01');
     expect(w.token).toBe('device-b-token');
@@ -254,7 +277,7 @@ describe('room: validation and host auth', () => {
     expect((await c.next('error')).message).toBe('bad message');
 
     // after hello, malformed actions are bad messages too and leave the socket usable
-    c.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01') });
+    await peekHello(c, 'p01', tokenOf('p01'));
     await c.next('welcome');
     for (const a of [{ type: 'move' }, { type: 'move', to: { x: 'a', y: 1 } }, { type: 'emote', kind: 'wave', target: 'x'.repeat(65) },
       { type: 'riddleAnswer', text: 'x'.repeat(201) }, { type: 'quizAnswer', choice: 1.5 }, { type: 'connect' },
@@ -354,7 +377,7 @@ describe('room: late state after welcome (R16)', () => {
     const [h] = await host(stub);
     await start(h);
     const p06 = await connect(stub);
-    p06.send({ t: 'hello', playerId: 'p06', token: tokenOf('p06') });
+    p06.send({ t: 'hello', playerId: 'p06', token: tokenOf('p06'), epoch: await epochOf(stub) });
     await p06.next('welcome');
     expect(await p06.next('riddle')).toEqual({ type: 'riddle', index: 0, q: content.riddles[0]!.q, lockedUntil: 0 });
     expect(p06.seen.slice(0, 2).map((m) => m.type)).toEqual(['welcome', 'riddle']);
@@ -375,7 +398,7 @@ describe('room: late state after welcome (R16)', () => {
       await h.next('hostState', (m) => m.snapshot.departures.length === i + 2);
     }
     const p31 = await connect(stub);
-    p31.send({ t: 'hello', playerId: 'p31', token: tokenOf('p31') });
+    p31.send({ t: 'hello', playerId: 'p31', token: tokenOf('p31'), epoch: await epochOf(stub) });
     await p31.next('welcome');
     await p31.next('riddle');
     expect(await p31.next('boss')).toEqual({
@@ -421,7 +444,7 @@ describe('room: host actions with socket side effects', () => {
     const hs = await h.next('hostState', (m) => !m.snapshot.players.p06);
     expect(hs.connectedPerTeam.pixel).toEqual({ online: 0, total: 4 });
     const again = await connect(stub);
-    again.send({ t: 'hello', playerId: 'p06', token: tokenOf('p06') });
+    again.send({ t: 'hello', playerId: 'p06', token: tokenOf('p06'), epoch: await epochOf(stub) });
     expect((await again.next('error')).message).toBe('unknown player');
   });
 });
@@ -531,7 +554,7 @@ describe('room: persistence, alarm and counters', () => {
     const stub = freshRoom();
     const [h, hs1] = await host(stub);
     expect(hs1.msgCount).toBe(1); // hostHello
-    const p = await player(stub, 'p01'); // 2: hello
+    const p = await player(stub, 'p01', tokenOf('p01'), hs1.snapshot.epoch); // 2: hello
     p.send('garbage'); // 3: invalid ones count too
     await p.next('error');
     act(p, { type: 'emote', kind: 'wave' }); // 4
@@ -572,5 +595,112 @@ describe('room: persistence, alarm and counters', () => {
     await h.next('hostState', (m) => m.snapshot.paused);
     // players can join again
     await player(stub, 'p01');
+  });
+});
+
+describe('room: epoch (a Reset sends every phone back to the name picker)', () => {
+  it('a hello with a missing or stale epoch gets "unknown player"; the current epoch gets welcome', async () => {
+    const stub = freshRoom();
+    const c = await connect(stub);
+    c.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01') }); // stored before epochs existed
+    expect((await c.next('error')).message).toBe('unknown player');
+    c.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01'), epoch: 'e-stale-1' });
+    expect((await c.next('error')).message).toBe('unknown player');
+    expect(c.all('welcome')).toEqual([]);
+    const epoch = await epochOf(stub);
+    c.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01'), epoch });
+    const w = await c.next('welcome');
+    expect(w.you).toBe('p01');
+    expect(w.snapshot.epoch).toBe(epoch);
+  });
+
+  it('after host.reset the old epoch is refused and a fresh peek + hello works first time', async () => {
+    const stub = freshRoom();
+    const [h, hs0] = await host(stub);
+    const old = hs0.snapshot.epoch;
+    const a = await player(stub, 'p01', tokenOf('p01'), old);
+    hostDo(h, { type: 'host.reset' });
+    expect((await a.closed).code).toBe(4002);
+    const hs = await h.next('hostState', (m) => m.snapshot.epoch !== old);
+    // the phone's replayed hello (old epoch) is refused, so it forgets its identity
+    const re = await connect(stub);
+    re.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01'), epoch: old });
+    expect((await re.next('error')).message).toBe('unknown player');
+    // the picker's peek carries the new epoch, and picking with it is welcomed
+    const fresh = await connect(stub);
+    fresh.send({ t: 'peek' });
+    const { snapshot } = await fresh.next('snapshot');
+    expect(snapshot.epoch).toBe(hs.snapshot.epoch);
+    fresh.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01'), epoch: snapshot.epoch });
+    expect((await fresh.next('welcome')).snapshot.epoch).toBe(snapshot.epoch);
+    expect(fresh.all('error')).toEqual([]);
+  });
+
+  it('a takeover from a stale epoch is refused the same way and kicks nobody', async () => {
+    const stub = freshRoom();
+    const [h, hs0] = await host(stub);
+    const old = hs0.snapshot.epoch;
+    hostDo(h, { type: 'host.reset' });
+    const hs = await h.next('hostState', (m) => m.snapshot.epoch !== old);
+    const a = await player(stub, 'p01', 'device-a-token', hs.snapshot.epoch);
+    const b = await connect(stub);
+    b.send({ t: 'hello', playerId: 'p01', token: 'device-b-token', takeover: true, epoch: old });
+    expect((await b.next('error')).message).toBe('unknown player');
+    b.send({ t: 'hello', playerId: 'p01', token: 'device-b-token', takeover: true });
+    expect((await b.next('error')).message).toBe('unknown player');
+    await sync(a);
+    expect(a.all('kicked')).toEqual([]);
+    expect(b.all('welcome')).toEqual([]);
+  });
+
+  it('addSelf needs no epoch; its welcome carries the current one', async () => {
+    const stub = freshRoom();
+    const epoch = await epochOf(stub);
+    const c = await connect(stub);
+    c.send({ t: 'addSelf', name: 'Zed', teamId: 'pixel', token: tokenOf('zed') });
+    expect((await c.next('welcome')).snapshot.epoch).toBe(epoch);
+  });
+
+  it('the epoch survives a restart, so a restart alone sends nobody to the picker', async () => {
+    const stub = freshRoom();
+    const epoch = await epochOf(stub);
+    // Nothing else has been saved yet (a hello does not persist): the epoch must be on disk anyway.
+    const p = await player(stub, 'p06', tokenOf('p06'), epoch);
+    expect((await stored(stub))?.epoch).toBe(epoch);
+    await evictDurableObject(stub, { webSockets: 'close' });
+    await p.closed;
+    expect(await epochOf(stub)).toBe(epoch);
+    await player(stub, 'p06', tokenOf('p06'), epoch);
+  });
+
+  it('a save from before epochs existed gets one on load, and epoch-less hellos are refused', async () => {
+    const stub = freshRoom();
+    await runInDurableObject<Room, void>(stub, async (room, state) => {
+      const { epoch: _e, ...old } = persistable(room.game);
+      await state.storage.put('state', old);
+    });
+    await evictDurableObject(stub, { webSockets: 'close' });
+    const epoch = await epochOf(stub);
+    expect(epoch).toMatch(/^e-/);
+    // the backfilled epoch is saved at once, so a second restart keeps it
+    expect((await stored(stub))?.epoch).toBe(epoch);
+    await evictDurableObject(stub, { webSockets: 'close' });
+    expect(await epochOf(stub)).toBe(epoch);
+    const c = await connect(stub);
+    c.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01') });
+    expect((await c.next('error')).message).toBe('unknown player');
+    c.send({ t: 'hello', playerId: 'p01', token: tokenOf('p01'), epoch });
+    await c.next('welcome');
+  });
+
+  it('host reset also closes picker (peek-only) sockets with 4002, so their replayed peek shows the new roster', async () => {
+    const stub = freshRoom();
+    const [h] = await host(stub);
+    const picker = await connect(stub);
+    picker.send({ t: 'peek' });
+    await picker.next('snapshot');
+    hostDo(h, { type: 'host.reset' });
+    expect(await picker.closed).toEqual({ code: 4002, reason: 'reset' });
+    await barrier(h); // host sockets stay open
   });
 });

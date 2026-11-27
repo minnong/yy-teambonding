@@ -15,7 +15,7 @@ export { nextLeader, ordinal, departTeam, bossTeam } from './calls';
 export { catchUp } from './catchup';
 export { riddleState } from './scoring';
 export {
-  createState, persistable, restore, slotOf, isPlayingTeam, activePlayers, utcDay, type Persisted,
+  createState, newEpoch, persistable, restore, slotOf, isPlayingTeam, activePlayers, utcDay, type Persisted,
 } from './state';
 
 /** Total over every Action type: the compiler flags any action without a handler. */
@@ -41,6 +41,7 @@ export function publicSnapshot(state: GameState, ctx: Ctx): PublicSnapshot {
   for (const p of Object.values(state.players)) if (!p.removed) players[p.id] = p;
   const q = state.quiz ? ctx.content.quiz[state.quiz.questionIndex] : undefined;
   return structuredClone({
+    epoch: state.epoch,
     phase: state.phase,
     paused: state.paused,
     teamOrder: state.teamOrder,

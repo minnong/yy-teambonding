@@ -302,6 +302,42 @@ describe('game core: phases', () => {
     expect(s.motions.p06).toEqual(p06Motion);
     expect(s.msgCount).toEqual({ day: '2026-11-26', count: 77 });
   });
+
+  it('createState sets an epoch, deterministic given now and rng', () => {
+    const a = createState(content, 1000, () => 0.5);
+    expect(a.epoch).toMatch(/^e-[0-9a-z]+-[0-9a-z]+$/);
+    expect(a.epoch.length).toBeLessThanOrEqual(64);
+    expect(createState(content, 1000, () => 0.5).epoch).toBe(a.epoch);
+    expect(createState(content, 1000, () => 0.25).epoch).not.toBe(a.epoch);
+    expect(createState(content, 2000, () => 0.5).epoch).not.toBe(a.epoch);
+  });
+
+  it('reset gets a fresh epoch, even at the same instant with the same rng', () => {
+    const s = createState(content, 1000, () => 0.5);
+    const before = s.epoch;
+    run(s, { type: 'host.reset' }, 1000); // ctx.rng is () => 0.5 too
+    expect(s.epoch).toBeTruthy();
+    expect(s.epoch).not.toBe(before);
+    const second = s.epoch;
+    run(s, { type: 'host.reset' }, 5000);
+    expect(s.epoch).not.toBe(second);
+  });
+
+  it('reset keeps a look only when the slot keeps its name (trimmed, any case), else clears it', () => {
+    const s = room();
+    for (const id of ['p01', 'p02', 'p06']) run(s, { type: 'setLook', playerId: id, look: LOOK }, 1000);
+    const renamed = {
+      ...content,
+      players: content.players.map((p) =>
+        p.id === 'p01' ? { ...p, name: 'Ciara' }
+          : p.id === 'p02' ? { ...p, name: `  ${p.name.toUpperCase()} ` } : p),
+    };
+    apply(s, { type: 'host.reset' }, { now: 3000, rng: () => 0.5, content: renamed });
+    expect(s.players.p01!.name).toBe('Ciara');
+    expect(s.players.p01!.look).toBeNull(); // someone else's avatar is never inherited
+    expect(s.players.p02!.look).toEqual(LOOK); // same name, only spacing/case differ
+    expect(s.players.p06!.look).toEqual(LOOK); // unchanged roster slot keeps its avatar
+  });
 });
 
 describe('game core: roster host actions', () => {
@@ -391,9 +427,10 @@ describe('game core: dispatcher, snapshot and persistence', () => {
     s.icebreakers.ib1 = { id: 'ib1', a: 'p01', b: 'p06', prompt: 3, answeredBy: null };
     const snap = publicSnapshot(s, ctx(4321));
     expect(snap.serverNow).toBe(4321);
+    expect(snap.epoch).toBe(s.epoch);
     expect(snap.quizActive).toEqual({ q: content.quiz[2]!.q, choices: content.quiz[2]!.choices, endsAt: 9000 });
     expect(Object.keys(snap).sort()).toEqual([
-      'collectibles', 'departures', 'lastCallAt', 'motions', 'online', 'paused', 'phase', 'players',
+      'collectibles', 'departures', 'epoch', 'lastCallAt', 'motions', 'online', 'paused', 'phase', 'players',
       'quizActive', 'serverNow', 'teamOrder', 'teams',
     ]);
     const json = JSON.stringify(snap);
@@ -426,6 +463,16 @@ describe('game core: dispatcher, snapshot and persistence', () => {
     const { callTimes: _c, ...old } = persistable(s);
     const back = restore(old as Persisted, 9000);
     expect(back.callTimes).toEqual([2000, 2000, 8000]);
+  });
+
+  it('restore backfills an epoch for a save from before epochs existed, and keeps a saved one', () => {
+    const s = room();
+    const { epoch: _e, ...old } = persistable(s);
+    const back = restore(old as Persisted, 9000);
+    expect(typeof back.epoch).toBe('string');
+    expect(back.epoch.length).toBeGreaterThan(0);
+    expect(back.epoch).not.toBe(s.epoch);
+    expect(restore(JSON.parse(JSON.stringify(persistable(s))), 9000).epoch).toBe(s.epoch);
   });
 
   it('persistable+restore round-trips everything except motions/online', () => {

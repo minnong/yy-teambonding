@@ -7,7 +7,12 @@ import type { Outbound } from './result';
 /** The UTC calendar day (YYYY-MM-DD) msgCount is bucketed by. */
 export const utcDay = (now: number) => new Date(now).toISOString().slice(0, 10);
 
-export function createState(content: Content, now: number): GameState {
+/** A short room-epoch id, `e-<base36 now>-<base36 rng>`. Deterministic given `now` and `rng`. */
+export const newEpoch = (now: number, rng: () => number): string =>
+  `e-${Math.max(0, Math.floor(now)).toString(36)}-${Math.floor(rng() * 36 ** 6).toString(36)}`;
+
+/** `rng` only seeds the epoch; pass ctx.rng where there is one. */
+export function createState(content: Content, now: number, rng: () => number = Math.random): GameState {
   const teams: GameState['teams'] = {};
   for (const t of content.teams) {
     teams[t.id] = {
@@ -21,6 +26,7 @@ export function createState(content: Content, now: number): GameState {
     players[p.id] = { id: p.id, name: p.name, teamId: p.teamId, look: null, addedOnDay: false, removed: false };
   }
   return {
+    epoch: newEpoch(now, rng),
     phase: 'warmup', paused: false, pausedAt: null,
     teamOrder: content.teams.map((t) => t.id), teams, players,
     metPairs: [], icebreakers: {},
@@ -43,8 +49,10 @@ export function persistable(state: GameState): Persisted {
  * Rebuilds a live state from a save. Icebreakers are dropped: every socket reconnects after a
  * restart, and a stale card would lock its two players out with "Already in an icebreaker".
  */
-export function restore(saved: Persisted, now: number): GameState {
+export function restore(saved: Persisted, now: number, rng: () => number = Math.random): GameState {
   const s: GameState = { ...structuredClone(saved), icebreakers: {}, motions: {}, online: {}, lastTickAt: now };
+  // Saves from before epochs existed: a fresh one, so every identity stored until now re-picks.
+  if (typeof s.epoch !== 'string' || s.epoch.length === 0) s.epoch = newEpoch(now, rng);
   // Saves from before callTimes existed: exact times are lost, so the latest call keeps lastCallAt
   // and earlier ones fall back to the competition start.
   if (!Array.isArray(s.callTimes)) {

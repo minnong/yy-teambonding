@@ -95,6 +95,19 @@ describe('Net', () => {
     }
   });
 
+  it('the remembered hello replays with its epoch, after a drop and after a 4002 reset', () => {
+    const { net } = mk();
+    net.connect({ t: 'peek' });
+    net.remember({ ...hello, epoch: 'e-old-1' });
+    last().drop(4002);
+    last().open();
+    expect(last().sent.map((s) => JSON.parse(s))).toEqual([{ ...hello, epoch: 'e-old-1' }]);
+    last().drop();
+    vi.advanceTimersByTime(500);
+    last().open();
+    expect(last().sent.map((s) => JSON.parse(s))).toEqual([{ ...hello, epoch: 'e-old-1' }]);
+  });
+
   it('reconnects immediately after 4002', () => {
     const { net } = mk();
     net.connect(hello);

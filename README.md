@@ -36,6 +36,8 @@ The same file also holds the icebreakers, riddles, quiz questions and the final 
 
 **After deploying a new roster, press Reset on the host page** (Scores tab, Danger zone). The room keeps the roster it already has saved, so the new names and teams only appear after a Reset. Do this before the event, never during it.
 
+After a Reset, everyone picks their name again: every phone that joined before it (even one that was closed at the time) goes back to the name list. A name that did not change keeps its avatar; a renamed slot starts with a new one.
+
 `npm test` is for developers. It uses its own copy of the placeholder roster, so it keeps passing whatever you put in `content/event.json`.
 
 ## 3. Optional: your own domain
@@ -80,7 +82,7 @@ All buttons are on the Run tab unless noted. Tabs: Run, Scores, People, QR.
 | Undo last call (bring back TEAMNAME) | You called by mistake | The button shows the team's name. A confirm asks "Bring TEAM X back into the game?"; press "Bring them back". |
 | Pause / Resume | You need everyone to stop for a moment | Freezes the room (the header shows PAUSED). Resume carries on. |
 | Scores tab: -10, -5, +5, +10 under each team | A dispute over points | Changes that team's score by that amount. |
-| Scores tab: Reset event | Dry runs only, before the event | Clears everything and sends everyone back to the start. You must confirm twice and type RESET. **Never press Reset during the event — it erases all scores and sends everyone back to the start.** |
+| Scores tab: Reset event | Dry runs only, before the event | Clears everything and sends everyone back to the start. You must confirm twice and type RESET. **Never press Reset during the event — it erases all scores and sends everyone back to the start.** After a Reset, everyone picks their name again. |
 
 Other things to know:
 

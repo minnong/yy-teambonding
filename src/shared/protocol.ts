@@ -51,6 +51,8 @@ export type ActionOf<T extends ActionType> = Extract<Action, { type: T }>;
 // ---------- Snapshot ----------
 
 export interface PublicSnapshot {
+  /** The room epoch (GameState.epoch). Not secret: every hello must echo it. */
+  epoch: string;
   phase: Phase;
   paused: boolean;
   teamOrder: TeamId[];
@@ -168,7 +170,8 @@ export const HostActionSchema = z.discriminatedUnion('type', [
 const token = z.string().min(TOKEN_MIN_LEN).max(TOKEN_MAX_LEN);
 
 export const ClientMsgSchema = z.discriminatedUnion('t', [
-  z.strictObject({ t: z.literal('hello'), playerId: id, token, takeover: z.boolean().optional() }),
+  /** `epoch` must equal the room's current epoch (missing counts as stale) or it is "unknown player". */
+  z.strictObject({ t: z.literal('hello'), playerId: id, token, takeover: z.boolean().optional(), epoch: id.optional() }),
   z.strictObject({ t: z.literal('addSelf'), name: z.string().max(MAX_NAME_LEN), teamId: id, token }),
   z.strictObject({ t: z.literal('hostHello'), pin: z.string().max(MAX_ID_LEN) }),
   /** Pre-hello roster peek: replies `snapshot` to the sender only; attaches no identity. */
@@ -178,8 +181,12 @@ export const ClientMsgSchema = z.discriminatedUnion('t', [
 ]);
 export type ClientMsg = z.infer<typeof ClientMsgSchema>;
 
+/** A player hello. `epoch` comes from the snapshot the identity was chosen from (peek or welcome). */
+export interface HelloMsg { t: 'hello'; playerId: PlayerId; token: string; takeover?: boolean; epoch?: string }
+
 // Compile-time guards: the wire schemas produce exactly the reducer's action shapes.
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 const _hostOk: Same<z.infer<typeof HostActionSchema>, HostAction> = true;
 const _playerOk: Same<z.infer<typeof PlayerWireActionSchema>, PlayerWireAction> = true;
-void _hostOk; void _playerOk;
+const _helloOk: Same<Extract<ClientMsg, { t: 'hello' }>, HelloMsg> = true;
+void _hostOk; void _playerOk; void _helloOk;

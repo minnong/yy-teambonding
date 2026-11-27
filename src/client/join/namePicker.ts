@@ -5,7 +5,8 @@ import { NAME_TAKEN } from '@shared/game/players';
 import type { Net } from '../net';
 
 export interface PickerHandlers {
-  onPick(playerId: string): void;
+  /** `epoch` is that of the snapshot the tapped list was drawn from (read at tap time). */
+  onPick(playerId: string, epoch: string): void;
   onAddSelf(name: string, teamId: string): void;
 }
 export interface PickerView {
@@ -76,7 +77,7 @@ export function showNamePicker(root: HTMLElement, net: Net, h: PickerHandlers): 
       for (const p of players) {
         const b = el('button', 'lb-row', p.name);
         b.style.borderLeftColor = team.color;
-        b.addEventListener('click', () => h.onPick(p.id));
+        b.addEventListener('click', () => h.onPick(p.id, snap?.epoch ?? s.epoch));
         list.appendChild(b);
       }
     }

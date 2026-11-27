@@ -74,7 +74,7 @@ describe('table signs', () => {
 
 describe('wall leaderboard', () => {
   const snap = (teams: Team[], departures: string[]): PublicSnapshot => ({
-    phase: 'competition', paused: false, teamOrder: teams.map((t) => t.id),
+    epoch: 'e-test', phase: 'competition', paused: false, teamOrder: teams.map((t) => t.id),
     teams: Object.fromEntries(teams.map((t) => [t.id, t])), players: {}, motions: {}, online: {},
     collectibles: [], departures, lastCallAt: null, quizActive: null, serverNow: 0,
   });

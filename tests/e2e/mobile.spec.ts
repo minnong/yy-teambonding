@@ -1,6 +1,8 @@
 // Phone checks: join flow, no zoom/scroll anywhere, and tap-to-walk. Each test resets the room.
 import { test, expect, type Page } from '@playwright/test';
-import { expectInputsAtLeast16px, expectNoZoomOrScroll, joinAsNewcomer, myPos, resetRoom, TEAM } from './helpers';
+import {
+  expectInputsAtLeast16px, expectNoZoomOrScroll, joinAsNewcomer, myPos, playerName, resetRoom, TEAM,
+} from './helpers';
 
 test.beforeEach(async ({ baseURL }) => { await resetRoom(baseURL!); });
 
@@ -83,4 +85,74 @@ test('mobile: rapid taps coalesce into one move per second (R27)', async ({ page
   for (let i = 1; i < moves.length; i++) expect(moves[i]! - moves[i - 1]!).toBeGreaterThanOrEqual(950);
   expect(moves.length).toBeLessThan(6);
   expect(moves.at(-1)!).toBeGreaterThanOrEqual(lastTapAt);
+});
+
+type StoredMe = { playerId: string; token: string; epoch?: string } | null;
+const storedMe = (page: Page) =>
+  page.evaluate(() => JSON.parse(localStorage.getItem('lobby.me') ?? 'null') as StoredMe);
+const pickerShown = (page: Page) => expect(page.getByRole('heading', { name: 'Who are you?' })).toBeVisible();
+
+/** Taps a roster name, builds an avatar if asked (a kept look skips the builder), ends in the room. */
+async function pickRosterName(page: Page, name: string): Promise<void> {
+  await page.getByRole('button', { name, exact: true }).click();
+  const enter = page.getByRole('button', { name: 'Enter room' });
+  const canvas = page.locator('#lb-room canvas');
+  await expect(enter.or(canvas)).toBeVisible();
+  if (await enter.isVisible()) await enter.click();
+  await expect(canvas).toBeVisible();
+}
+
+test('mobile: after a Reset a phone in the room goes back to the name picker, and one pick gets back in', async ({ page, baseURL }) => {
+  const name = playerName('p01');
+  await page.goto('/');
+  await pickRosterName(page, name);
+  const before = await storedMe(page);
+  expect(before?.playerId).toBe('p01');
+  expect(before?.epoch).toMatch(/^e-/);
+
+  await resetRoom(baseURL!);
+  await pickerShown(page);
+  expect(await storedMe(page)).toBeNull();
+
+  const errors: string[] = [];
+  page.on('websocket', (ws) => ws.on('framereceived', (f) => {
+    if (typeof f.payload === 'string' && f.payload.includes('"type":"error"')) errors.push(f.payload);
+  }));
+  await pickRosterName(page, name);
+  expect(errors).toEqual([]);
+  const after = await storedMe(page);
+  expect(after?.playerId).toBe('p01');
+  expect(after?.epoch).toMatch(/^e-/);
+  expect(after?.epoch).not.toBe(before?.epoch);
+});
+
+test('mobile: a phone closed during a Reset opens on the name picker', async ({ page, context, baseURL }) => {
+  await page.goto('/');
+  await pickRosterName(page, playerName('p06'));
+  await page.close();
+  await resetRoom(baseURL!);
+  const later = await context.newPage();
+  await later.goto('/');
+  await pickerShown(later);
+  expect(await storedMe(later)).toBeNull();
+});
+
+test('mobile: a picker left open during a Reset re-peeks, so the first pick after it is welcomed', async ({ page, baseURL }) => {
+  let peeks = 0;
+  const errors: string[] = [];
+  page.on('websocket', (ws) => {
+    ws.on('framesent', (f) => { if (typeof f.payload === 'string' && f.payload.includes('"t":"peek"')) peeks++; });
+    ws.on('framereceived', (f) => {
+      if (typeof f.payload === 'string' && f.payload.includes('"type":"error"')) errors.push(f.payload);
+    });
+  });
+  await page.goto('/');
+  const name = playerName('p11');
+  await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+  const first = peeks;
+  await resetRoom(baseURL!);
+  await expect.poll(() => peeks).toBeGreaterThan(first);
+  await pickRosterName(page, name);
+  expect(errors).toEqual([]);
+  expect((await storedMe(page))?.playerId).toBe('p11');
 });

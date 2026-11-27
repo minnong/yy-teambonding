@@ -18,7 +18,7 @@ export const CLOSE = {
   /** Another socket took over this player (a `kicked` message precedes it when the token differs). */
   replaced: 4000,
   badPin: 4001,
-  /** host.reset: start the join flow again. */
+  /** host.reset: start the join flow again (the stale epoch then sends the phone to the picker). */
   reset: 4002,
   /** The player no longer exists (host.removePlayer, or gone from a restored state). */
   removed: 4003,
@@ -68,14 +68,18 @@ export class Room extends DurableObject<Env> {
     const saved = await this.ctx.storage.get<Persisted>('state');
     const counted = await this.ctx.storage.get<MsgCount>('msgCount');
     try {
-      this.game = saved ? restore(saved, now) : createState(this.content, now);
+      this.game = saved ? restore(saved, now) : createState(this.content, now, Math.random);
     } catch (e) {
       // Never brick the room: keep the unreadable save for manual recovery and start fresh.
       console.error('room: could not restore saved state', e);
       await this.ctx.storage.put(`state-unreadable-${now}`, saved);
-      this.game = createState(this.content, now);
+      this.game = createState(this.content, now, Math.random);
     }
     this.game.msgCount = fresherCount(this.game.msgCount, counted);
+    // A new epoch (no save yet, a save from before epochs, or an unreadable one) must reach disk
+    // now: hello/connect never persist, so otherwise the next wake-up would mint another and
+    // send every phone that joined meanwhile back to the name picker.
+    if (saved?.epoch !== this.game.epoch) await this.persist();
 
     // Woken from hibernation (or restarted with sockets still attached): `online` came back
     // empty, so mark everyone who still holds a socket as connected again.
@@ -143,11 +147,17 @@ export class Room extends DurableObject<Env> {
         return;
       case 'hello':
         if (att) { sendError(ws, 'already said hello'); return; }
+        // An identity from before the last Reset (or from before epochs existed: no epoch at all) is
+        // stale even if its slot id still exists, since the slot may hold another name now. The
+        // client answers "unknown player" by forgetting the identity and showing the name picker.
+        // Checked first, so a stale takeover is refused too and kicks nobody.
+        if (msg.epoch !== this.game.epoch) { sendError(ws, 'unknown player'); return; }
         return this.hello(ws, msg.playerId, msg.token, msg.takeover === true, now);
       case 'addSelf': {
         if (att) { sendError(ws, 'already said hello'); return; }
         const r = apply(this.game, { type: 'addSelf', name: msg.name, teamId: msg.teamId }, this.ctxAt(now));
-        // The hello below broadcasts the snapshot that includes the new player.
+        // The hello below broadcasts the snapshot that includes the new player. It needs no epoch
+        // check: the identity is brand new, and its welcome carries the current epoch.
         await this.commit({ ...r, snapshot: false }, ws, now);
         if (r.addedPlayerId) await this.hello(ws, r.addedPlayerId, msg.token, false, now);
         return;
@@ -210,9 +220,11 @@ export class Room extends DurableObject<Env> {
     const r = apply(this.game, action, this.ctxAt(now));
     if (!r.error) {
       // Close before fan-out so the closed sockets are skipped (their webSocketClose then
-      // marks them offline). Host sockets stay open.
+      // marks them offline). Host sockets stay open. Sockets that have not said hello (the name
+      // picker's peek) are closed too: they never get broadcasts, so their replayed peek is how
+      // a picker left open learns the new roster and epoch.
       if (action.type === 'host.reset') {
-        for (const s of listSockets(this.ctx)) if (isPlayerSock(s)) close(s.ws, CLOSE.reset, 'reset');
+        for (const s of listSockets(this.ctx)) if (!isHostSock(s)) close(s.ws, CLOSE.reset, 'reset');
       }
       if (action.type === 'host.removePlayer') {
         for (const s of socketsOf(listSockets(this.ctx), action.playerId)) close(s.ws, CLOSE.removed, 'removed');

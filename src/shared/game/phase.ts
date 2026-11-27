@@ -1,7 +1,7 @@
 // Phase transitions: start competition, pause/resume, reset.
 import { truncateAt } from '../motion';
 import { type Handler, type HandlerMap, ok, err } from './result';
-import { createState } from './state';
+import { createState, newEpoch } from './state';
 import { departTeam } from './calls';
 
 export { upBanner } from './calls';
@@ -40,16 +40,22 @@ const resume: Handler<'host.resume'> = (state, _a, ctx) => {
   return ok([{ to: 'all', msg: { type: 'banner', text: '' } }], { persist: true, snapshot: true });
 };
 
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
 /**
- * Back to a fresh createState(content): the content roster, warm-up, no scores. Keeps roster
- * players' looks, and online/motions for players that still exist, plus msgCount.
- * The Room then closes every player socket with code 4002 so clients re-hello.
+ * Back to a fresh createState(content): the content roster, warm-up, no scores, a new epoch.
+ * A roster slot keeps its look only if its name is unchanged (so nobody inherits someone else's
+ * avatar); online/motions are kept for players that still exist, plus msgCount.
+ * The Room then closes every player and picker socket with code 4002; the new epoch makes every
+ * phone that joined before (online or not) go back to the name picker.
  */
 const reset: Handler<'host.reset'> = (state, _a, ctx) => {
-  const fresh = createState(ctx.content, ctx.now);
+  const fresh = createState(ctx.content, ctx.now, ctx.rng);
+  // A repeat of the old epoch (same instant, same rng draw) would let stale identities back in.
+  for (let t = ctx.now + 1; fresh.epoch === state.epoch; t++) fresh.epoch = newEpoch(t, ctx.rng);
   for (const p of Object.values(fresh.players)) {
     const old = state.players[p.id];
-    if (old && !old.addedOnDay) p.look = old.look;
+    if (old && !old.addedOnDay && sameName(old.name, p.name)) p.look = old.look;
     if (state.online[p.id]) fresh.online[p.id] = true;
     const m = state.motions[p.id];
     if (m) fresh.motions[p.id] = m;

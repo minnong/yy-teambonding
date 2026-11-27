@@ -6,7 +6,7 @@ import type { AvatarLook } from '@shared/types';
 const LOOK: AvatarLook = { skin: 1, hair: 2, hairColor: 3, top: 0, topColor: 4, bottomsColor: 5, accessory: 1 };
 const ME = 'p01';
 const snap = (look: AvatarLook | null, present = true): PublicSnapshot => ({
-  phase: 'warmup', paused: false, teamOrder: ['otter'], teams: {}, motions: {}, online: {},
+  epoch: 'e-test', phase: 'warmup', paused: false, teamOrder: ['otter'], teams: {}, motions: {}, online: {},
   players: present ? { [ME]: { id: ME, name: 'Ana', teamId: 'otter', look, addedOnDay: false, removed: false } } : {},
   collectibles: [], departures: [], lastCallAt: null, quizActive: null, serverNow: 0,
 });

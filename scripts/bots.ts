@@ -131,6 +131,8 @@ function randomLook(): AvatarLook {
 
 class Bot {
   id: PlayerId | null = null;
+  /** The room epoch from the welcome: a reconnect hello must carry it. */
+  epoch: string | undefined;
   ws: WebSocket | null = null;
   readonly token = crypto.randomUUID();
   private readonly budget = new ActBudget();
@@ -167,7 +169,7 @@ class Bot {
       this.ws = ws;
       let triedAlt = false;
       ws.addEventListener('open', () => {
-        if (this.id) this.send({ t: 'hello', playerId: this.id, token: this.token });
+        if (this.id) this.send({ t: 'hello', playerId: this.id, token: this.token, epoch: this.epoch });
         else this.send({ t: 'addSelf', name: this.name, teamId: this.team, token: this.token });
       });
       ws.addEventListener('message', (e) => {
@@ -175,6 +177,7 @@ class Bot {
         if (m.type === 'welcome') {
           const first = this.id === null;
           this.id = m.you;
+          this.epoch = m.snapshot.epoch;
           if (first) { this.act({ type: 'setLook', look: randomLook() }); resolve(); }
           if (this.listener) { world.offset = m.serverNow - Date.now(); this.absorb(m.snapshot); }
         } else if (m.type === 'error') {

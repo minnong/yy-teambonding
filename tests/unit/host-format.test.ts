@@ -18,7 +18,7 @@ function snap(over: Partial<PublicSnapshot> = {}, teams: Team[] = [
   team('otter', 0, { goesFirst: true }), team('pixel', 0), team('comet', 0),
 ]): PublicSnapshot {
   return {
-    phase: 'warmup', paused: false, teamOrder: teams.map((t) => t.id),
+    epoch: 'e-test', phase: 'warmup', paused: false, teamOrder: teams.map((t) => t.id),
     teams: Object.fromEntries(teams.map((t) => [t.id, t])), players: {}, motions: {}, online: {},
     collectibles: [], departures: [], lastCallAt: null, quizActive: null, serverNow: 0, ...over,
   };

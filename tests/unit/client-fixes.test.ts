@@ -15,7 +15,7 @@ const team = (id: string, extra: Partial<Team> = {}): Team => ({
 const player = (id: string, teamId: string, name = id): Player => ({ id, name, teamId, look: null, addedOnDay: false, removed: false });
 function snap(teams: Team[], players: Player[] = [], over: Partial<PublicSnapshot> = {}): PublicSnapshot {
   return {
-    phase: 'competition', paused: false, teamOrder: teams.map((t) => t.id),
+    epoch: 'e-test', phase: 'competition', paused: false, teamOrder: teams.map((t) => t.id),
     teams: Object.fromEntries(teams.map((t) => [t.id, t])), players: Object.fromEntries(players.map((p) => [p.id, p])),
     motions: {}, online: {}, collectibles: [], departures: [], lastCallAt: null, quizActive: null, serverNow: 0, ...over,
   };

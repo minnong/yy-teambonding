@@ -16,6 +16,11 @@ export interface Quiz { questionIndex: number; endsAt: number;
   answers: Record<PlayerId, number> }
 export interface Collectible { id: string; pos: Vec }
 export interface GameState {
+  /**
+   * Changes on every Reset (and on the first load of a save without one). A hello must carry the
+   * current epoch, so a phone that joined before a Reset goes back to the name picker.
+   */
+  epoch: string;
   phase: Phase; paused: boolean; pausedAt: number | null;
   teamOrder: TeamId[]; teams: Record<TeamId, Team>; players: Record<PlayerId, Player>;
   metPairs: string[];                     // `${minId}|${maxId}`

@@ -4,7 +4,7 @@ import type { ClientHello } from './net';
 import { openAvatarBuilder } from './join/avatarBuilder';
 import { showNamePicker } from './join/namePicker';
 import type { PickerView } from './join/namePicker';
-import { browserToken, clearMe, loadMe, saveMe } from './identity';
+import { browserToken, clearMe, helloFor, loadMe, saveMe } from './identity';
 import type { Me } from './identity';
 import { startRoom } from './room/RoomScene';
 import { UiStore } from './ui/store';
@@ -66,7 +66,9 @@ function showPicker(): void {
   picker?.destroy();
   net.connect({ t: 'peek' });
   picker = showNamePicker(app, net, {
-    onPick: (playerId) => join({ t: 'hello', playerId, token: browserToken() }),
+    // The epoch of the snapshot the list was drawn from: picked from a list older than a Reset,
+    // the Room refuses it ("unknown player") and the picker comes back with the new roster.
+    onPick: (playerId, epoch) => join(helloFor({ playerId, token: browserToken(), epoch })),
     onAddSelf: (name, teamId) => {
       if (!net.send({ t: 'addSelf', name, teamId, token: browserToken() })) picker?.showError('Not connected yet, try again');
     },
@@ -74,12 +76,12 @@ function showPicker(): void {
 }
 
 function join(hello: ClientHello): void {
-  if (hello.t === 'hello') me = { playerId: hello.playerId, token: hello.token };
+  if (hello.t === 'hello') me = { playerId: hello.playerId, token: hello.token, ...(hello.epoch ? { epoch: hello.epoch } : {}) };
   net.connect(hello);
 }
 
 function takeoverHello(): ClientHello | null {
-  return me ? { t: 'hello', playerId: me.playerId, token: me.token, takeover: true } : null;
+  return me ? helloFor(me, true) : null;
 }
 
 function showKicked(): void {
@@ -97,13 +99,18 @@ function showKicked(): void {
 function showNameTaken(playerId: string): void {
   const name = roster?.players[playerId]?.name ?? 'This name';
   const take = mk('button', 'lb-add', 'Is this you? Take over.');
-  take.addEventListener('click', () => net.connect({ t: 'hello', playerId, token: browserToken(), takeover: true }));
+  // The epoch of the hello that was told nameTaken (me), else of the roster on screen.
+  const epoch = me?.playerId === playerId ? me.epoch : roster?.epoch;
+  take.addEventListener('click', () => net.connect(helloFor({ playerId, token: browserToken(), epoch }, true)));
   const back = mk('button', 'lb-back', 'Back');
   back.addEventListener('click', () => showPicker());
   showOverlay(mk('p', '', `${name} is already in the lobby on another device.`), take, back);
 }
 
-/** The stored identity is stale (host reset or removed): forget it and start over. */
+/**
+ * The stored identity is stale (host reset: wrong epoch; or removed): forget it and start over.
+ * Cannot loop: the picker's fresh peek carries the current epoch, so the next pick is welcomed.
+ */
 function forgetMe(): void {
   clearMe();
   me = null;
@@ -129,10 +136,11 @@ net.on('error', (m) => {
 });
 
 net.on('welcome', (m) => {
-  const mine: Me = { playerId: m.you, token: m.token };
+  // The welcome's snapshot holds the epoch this identity is valid in (picked or added just now).
+  const mine: Me = { playerId: m.you, token: m.token, epoch: m.snapshot.epoch };
   me = mine;
   saveMe(mine);
-  net.remember({ t: 'hello', playerId: mine.playerId, token: mine.token }); // reconnects never carry takeover
+  net.remember(helloFor(mine)); // reconnects never carry takeover; a 4002 replays the old epoch
   latest = m.snapshot;
   pendingLook.onWelcome(m.snapshot, mine.playerId); // a reconnect: resend a look the server never got
   hideOverlay();
@@ -156,7 +164,7 @@ net.on('welcome', (m) => {
 
 if (me) {
   showStatus('Connecting…');
-  net.connect({ t: 'hello', playerId: me.playerId, token: me.token });
+  net.connect(helloFor(me));
 } else {
   showPicker();
 }
