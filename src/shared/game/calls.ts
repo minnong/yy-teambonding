@@ -133,6 +133,8 @@ const bossAnswer: Handler<'bossAnswer'> = (state, a, ctx) => {
   t.bossIndex++;
   if (t.bossIndex >= ctx.content.boss.steps.length) {
     t.bossDone = true;
+    // Ticks stop once the boss is beaten (R21), so sparkles left on the map could never be collected (M9).
+    state.collectibles = [];
     return ok([{ to: 'all', msg: { type: 'celebrate', teamId: t.id } }, bossMsg(state, t.id, ctx)],
       { persist: true, snapshot: true });
   }

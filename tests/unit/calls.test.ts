@@ -314,6 +314,15 @@ describe('calls: final boss', () => {
     expect(bossMsgs(r)).toEqual([]);
   });
 
+  it('beating the boss clears sparkles nobody can collect any more (M9)', () => {
+    const s = onlyMapleLeft(1000);
+    place(s, 'p31', spawnFor(6, 0));
+    s.collectibles = [{ id: 'c-1', pos: toWorld(20, 30) }];
+    STEPS.forEach((st, i) => run(s, { type: 'bossAnswer', playerId: 'p31', text: st.answers[0]! }, 20000 + i));
+    expect(s.teams.maple!.bossDone).toBe(true);
+    expect(s.collectibles).toEqual([]);
+  });
+
   it('boss chain completes with celebrate', () => {
     const s = onlyMapleLeft(1000);
     place(s, 'p31', spawnFor(6, 0));
