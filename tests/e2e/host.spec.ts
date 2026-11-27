@@ -1,6 +1,6 @@
 // The facilitator console: PIN, start, call next with the exact confirm copy, undo, stale leader.
 import { test, expect, type Page } from '@playwright/test';
-import { PIN, hostSocket, resetRoom } from './helpers';
+import { PIN, hostSocket, resetRoom, TEAM, TEAM_UP, playerName } from './helpers';
 
 test.beforeEach(async ({ baseURL }) => { await resetRoom(baseURL!); });
 
@@ -32,35 +32,35 @@ test('host: start, call next shows confirm with exact copy, undo', async ({ page
   await expect(page.getByRole('button', { name: 'Undo last call' })).toBeDisabled();
 
   await page.getByRole('button', { name: 'START COMPETITION' }).click();
-  await expect(dialog(page)).toContainText('TEAM OTTER goes first');
+  await expect(dialog(page)).toContainText(`${TEAM_UP('otter')} goes first`);
   await dialog(page).getByRole('button', { name: 'Start' }).click();
   await expect(page.locator('.h-pill')).toHaveText('COMPETITION');
   await expect(page.getByRole('button', { name: 'START COMPETITION' })).toBeDisabled();
-  await expect(board(page)).toContainText('✅ 1ST Otter');
+  await expect(board(page)).toContainText(`✅ 1ST ${TEAM.otter}`);
   await expect(page.locator('.h-timer-value')).toHaveText(/^0:0\d$/);
 
-  // Give Pixel the lead from the Scores tab, so the next call is deterministic.
+  // Give pixel the lead from the Scores tab, so the next call is deterministic.
   await page.getByRole('tab', { name: 'Scores' }).click();
   // A double tap sends once: the one-shot guard disables every host button until the reply.
-  await page.getByRole('button', { name: 'Add 10 points to Pixel' }).dblclick();
-  await expect(page.locator('.h-adj', { hasText: 'Pixel' })).toContainText('10 pts');
+  await page.getByRole('button', { name: `Add 10 points to ${TEAM.pixel}` }).dblclick();
+  await expect(page.locator('.h-adj', { hasText: TEAM.pixel })).toContainText('10 pts');
   await page.waitForTimeout(300);
-  await expect(page.locator('.h-adj', { hasText: 'Pixel' })).toContainText('10 pts');
+  await expect(page.locator('.h-adj', { hasText: TEAM.pixel })).toContainText('10 pts');
   await page.getByRole('tab', { name: 'Run' }).click();
-  await expect(page.locator('.h-next')).toHaveText('Next up: PIXEL · 10 pts');
+  await expect(page.locator('.h-next')).toHaveText(`Next up: ${TEAM.pixel!.toUpperCase()} · 10 pts`);
 
   await callBtn(page).click();
-  await expect(page.locator('#h-confirm-text')).toHaveText('This will call TEAM PIXEL (10 pts)');
+  await expect(page.locator('#h-confirm-text')).toHaveText(`This will call ${TEAM_UP('pixel')} (10 pts)`);
   await dialog(page).getByRole('button', { name: 'Yes, call them' }).click();
   await expect(dialog(page)).toHaveCount(0);
-  await expect(board(page)).toContainText('✅ 2ND Pixel');
+  await expect(board(page)).toContainText(`✅ 2ND ${TEAM.pixel}`);
 
-  const undo = page.getByRole('button', { name: 'Undo last call (bring back PIXEL)' });
+  const undo = page.getByRole('button', { name: `Undo last call (bring back ${TEAM.pixel!.toUpperCase()})` });
   await expect(undo).toBeEnabled();
   await undo.click();
   await dialog(page).getByRole('button', { name: 'Bring them back' }).click();
   await expect(board(page).locator('.h-row-departed')).toHaveCount(1);
-  await expect(board(page).locator('.h-row-playing', { hasText: 'Pixel' })).toHaveCount(1);
+  await expect(board(page).locator('.h-row-playing', { hasText: TEAM.pixel })).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Undo last call', exact: true })).toBeDisabled();
 });
 
@@ -70,17 +70,17 @@ test('host: a changed leader shows the error and the confirm stays closed', asyn
     await side.act({ type: 'host.startCompetition' });
     await side.act({ type: 'host.adjustScore', teamId: 'comet', delta: 10 });
     await openHostInCompetition(page);
-    await expect(page.locator('.h-next')).toHaveText('Next up: COMET · 10 pts');
+    await expect(page.locator('.h-next')).toHaveText(`Next up: ${TEAM.comet!.toUpperCase()} · 10 pts`);
     await callBtn(page).click();
-    await expect(page.locator('#h-confirm-text')).toHaveText('This will call TEAM COMET (10 pts)');
-    // Someone else's points land while the confirm is open: the leader is now Nova.
+    await expect(page.locator('#h-confirm-text')).toHaveText(`This will call ${TEAM_UP('comet')} (10 pts)`);
+    // Someone else's points land while the confirm is open: the leader is now nova.
     await side.act({ type: 'host.adjustScore', teamId: 'nova', delta: 50 });
     await dialog(page).getByRole('button', { name: 'Yes, call them' }).click();
     await expect(page.getByRole('alert').filter({ hasText: 'The leader changed, check again' })).toBeVisible();
     await expect(dialog(page)).toHaveCount(0);
     await expect(board(page).locator('.h-row-departed')).toHaveCount(1);
     await callBtn(page).click();
-    await expect(page.locator('#h-confirm-text')).toHaveText('This will call TEAM NOVA (50 pts)');
+    await expect(page.locator('#h-confirm-text')).toHaveText(`This will call ${TEAM_UP('nova')} (50 pts)`);
   } finally { side.close(); }
 });
 
@@ -99,9 +99,9 @@ test('host: wrong PIN is cleared and shown', async ({ page }) => {
 test('host: people panel moves a player in warm-up only', async ({ page }) => {
   await openHost(page);
   await page.getByRole('tab', { name: 'People' }).click();
-  await page.getByLabel('Move Ray to another team').selectOption('pixel');
-  await expect(page.locator('.h-team-head', { hasText: 'Pixel' })).toHaveText('Pixel 0/6');
-  await expect(page.locator('.h-team-head', { hasText: 'Otter' })).toHaveText('Otter 0/4');
+  await page.getByLabel(`Move ${playerName('p01')} to another team`).selectOption('pixel');
+  await expect(page.locator('.h-team-head', { hasText: TEAM.pixel })).toHaveText(`${TEAM.pixel} 0/6`);
+  await expect(page.locator('.h-team-head', { hasText: TEAM.otter })).toHaveText(`${TEAM.otter} 0/4`);
   await expect(page.getByLabel('Goes first')).toHaveValue('otter');
 });
 
@@ -128,8 +128,8 @@ test('host: a double tap 150 ms apart sends once, even after the reply came back
   await expect(pill).toHaveText('WARM-UP');
 
   await page.getByRole('tab', { name: 'Scores' }).click();
-  const pixel = page.locator('.h-adj', { hasText: 'Pixel' }).locator('strong');
-  await doubleTapAfterReply(page, page.getByRole('button', { name: 'Add 10 points to Pixel' }), () => expect(pixel).toHaveText('10 pts', { timeout: 140 }));
+  const pixel = page.locator('.h-adj', { hasText: TEAM.pixel }).locator('strong');
+  await doubleTapAfterReply(page, page.getByRole('button', { name: `Add 10 points to ${TEAM.pixel}` }), () => expect(pixel).toHaveText('10 pts', { timeout: 140 }));
   await expect(pixel).toHaveText('10 pts');
 
   // The second tap on "Yes, call them" lands on whatever is under it once the modal closes.

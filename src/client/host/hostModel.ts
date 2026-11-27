@@ -5,6 +5,7 @@ import { ordinal } from '@shared/ordinal';
 import { rankPlayingTeams } from '@shared/ranking';
 import type { PublicSnapshot, ServerMsg } from '@shared/protocol';
 import type { Team, TeamId } from '@shared/types';
+import { teamLabel } from '@shared/teamLabel';
 
 export type HostState = Extract<ServerMsg, { type: 'hostState' }>;
 export type NextLeader = HostState['nextLeader'];
@@ -30,7 +31,7 @@ export function sinceLastCall(lastCallAt: number | null, now: number): string {
 
 /** Verbatim copy (global constraints). */
 export function callConfirmText(t: { name: string; score: number }): string {
-  return `This will call TEAM ${t.name.toUpperCase()} (${t.score} pts)`;
+  return `This will call ${teamLabel(t.name).toUpperCase()} (${t.score} pts)`;
 }
 
 export function nextUpText(nl: NextLeader): string {

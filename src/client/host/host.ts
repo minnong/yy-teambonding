@@ -12,6 +12,7 @@ import {
   MODAL_GUARD_MS, nextUpText, sinceLastCall, teamCountText, undoTarget, type ButtonStates, type Guard, type HostState,
 } from './hostModel';
 import { Heartbeat } from '../heartbeat';
+import { teamLabel } from '@shared/teamLabel';
 
 const PIN_KEY = 'lobby.hostPin';
 /** A reply that never comes (socket died mid-send) must not lock the console for good. */
@@ -265,7 +266,7 @@ function buildRun(): HTMLElement {
   view.start = button('h-btn h-go', 'START COMPETITION', () => {
     if (!buttonStates(hs, locked()).start || !hs) return;
     const first = Object.values(hs.snapshot.teams).find((t) => t.goesFirst);
-    const who = first ? `TEAM ${first.name.toUpperCase()} goes first and is sent out straight away.` : 'No team is set to go first.';
+    const who = first ? `${teamLabel(first.name).toUpperCase()} goes first and is sent out straight away.` : 'No team is set to go first.';
     confirmBox({ text: `Start the competition? ${who}`, ok: 'Start', onOk: () => send({ type: 'host.startCompetition' }) });
   });
   view.quiz = button('h-btn', 'QUICK-FIRE QUIZ', () => { if (buttonStates(hs, locked()).quiz) send({ type: 'host.quizStart' }); });
@@ -277,7 +278,7 @@ function buildRun(): HTMLElement {
     if (!t) return;
     // R26: the team is fixed when the confirm opens; the server refuses if the last call changed.
     const expectedTeamId = t.id;
-    confirmBox({ text: `Bring TEAM ${t.name.toUpperCase()} back into the game?`, ok: 'Bring them back', onOk: () => send({ type: 'host.undoCall', expectedTeamId }) });
+    confirmBox({ text: `Bring ${teamLabel(t.name).toUpperCase()} back into the game?`, ok: 'Bring them back', onOk: () => send({ type: 'host.undoCall', expectedTeamId }) });
   });
   const grid = add(el('div', 'h-grid'), view.start, view.quiz, view.pause, view.resume, view.undo);
   add(p, view.timer, view.nextUp, view.call, view.callHint, grid, el('h2', '', 'Leaderboard'), view.board);

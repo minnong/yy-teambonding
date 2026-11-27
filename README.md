@@ -115,5 +115,6 @@ The art comes from the Liberated Pixel Cup (LPC) character generator. Full attri
 - `npm run dev`: local dev server.
 - `npm test`: unit and worker tests (builds first). It works without `.dev.vars`, because the worker tests bind their own test-only PIN.
 - `npm run check-content`: validates `content/event.json`.
+- Unit and worker tests use a frozen placeholder roster in `tests/fixtures/event.json`, so editing the real roster never breaks them. Browser tests read names from the real roster.
 - `npx playwright test`: browser tests (local only).
 - `npm run typecheck`: type check.

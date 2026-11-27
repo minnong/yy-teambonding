@@ -8,6 +8,7 @@ import { rankPlayingTeams } from '../ranking';
 import { type Ctx, type Handler, type HandlerMap, type Outbound, ok, err } from './result';
 import { isPlayingTeam, livePlayer, slotOf } from './state';
 import { onTeamDeparted } from './scoring';
+import { teamLabel } from '../teamLabel';
 
 export { ordinal } from '../ordinal';
 
@@ -17,8 +18,8 @@ const WRONG = 'Not quite, try again!';
 const MAX_ANSWER = 200;
 export const FINAL_BOSS_BANNER = 'FINAL BOSS: escape the lobby!';
 
-export const upBanner = (name: string) => `🎉 Team ${name}, you're up! Head to the next activity.`;
-export const backBanner = (name: string) => `Team ${name} is back in the game!`;
+export const upBanner = (name: string) => `🎉 ${teamLabel(name)}, you're up! Head to the next activity.`;
+export const backBanner = (name: string) => `${teamLabel(name)} is back in the game!`;
 
 const playingTeams = (state: GameState): TeamId[] => state.teamOrder.filter((id) => isPlayingTeam(state, id));
 

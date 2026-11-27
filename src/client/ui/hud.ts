@@ -24,6 +24,7 @@ import {
   youreUpMissed,
 } from './uiState';
 import { moveHeldText } from '../room/moveThrottle';
+import { teamLabel } from '@shared/teamLabel';
 
 const EMOTE_LABEL: Record<string, string> = { wave: 'Wave', highfive: 'High-five', laugh: 'Laugh', heart: 'Heart' };
 /** Client-side spam guard for emote taps (message budget). */
@@ -161,7 +162,7 @@ export function mountRoomUi(net: Net, me: Me, room: RoomApi, store: UiStore, ini
     body.hidden = !expanded;
     chip.replaceChildren(el('i', 'lb-dot'), el('span', '', p?.name ?? 'Someone'), el('span', 'lb-chip-hint', expanded ? '' : '· say hi'));
     whoName.textContent = p?.name ?? 'Someone';
-    whoTeam.textContent = t ? `Team ${t.name}` : '';
+    whoTeam.textContent = t ? teamLabel(t.name) : '';
     ibBtn.hidden = !canIcebreak(snap, myId, target);
     hud.classList.toggle('lb-sheet-open', expanded);
   };

@@ -2,7 +2,15 @@ import { defineConfig } from 'vitest/config';
 import { cloudflareTest } from '@cloudflare/vitest-plugin';
 import { resolve } from 'node:path';
 
-const alias = { '@shared': resolve(import.meta.dirname, 'src/shared') };
+/**
+ * Unit and worker tests run against a frozen copy of the placeholder roster
+ * (tests/fixtures/event.json), so editing the real content/event.json never breaks them.
+ * The real file is still validated by tests/unit/real-content.test.ts and by `npm run deploy`.
+ */
+const alias = [
+  { find: '@shared', replacement: resolve(import.meta.dirname, 'src/shared') },
+  { find: /^.*\/content\/event\.json$/, replacement: resolve(import.meta.dirname, 'tests/fixtures/event.json') },
+];
 /**
  * Worker tests bind their own HOST_PIN, so `npm test` works from a fresh clone without the
  * gitignored .dev.vars (M11). A test-only value, never a real secret.

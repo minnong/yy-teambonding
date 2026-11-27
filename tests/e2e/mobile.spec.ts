@@ -1,6 +1,6 @@
 // Phone checks: join flow, no zoom/scroll anywhere, and tap-to-walk. Each test resets the room.
 import { test, expect, type Page } from '@playwright/test';
-import { expectInputsAtLeast16px, expectNoZoomOrScroll, joinAsNewcomer, myPos, resetRoom } from './helpers';
+import { expectInputsAtLeast16px, expectNoZoomOrScroll, joinAsNewcomer, myPos, resetRoom, TEAM } from './helpers';
 
 test.beforeEach(async ({ baseURL }) => { await resetRoom(baseURL!); });
 
@@ -41,7 +41,7 @@ test('mobile: no zoom or scroll', async ({ page }) => {
 
   // In the room: 5 floor taps and a double tap must not zoom or scroll the page either.
   await page.getByRole('button', { name: 'Back' }).tap();
-  await joinAsNewcomer(page, 'E2E Zoomer', 'Comet');
+  await joinAsNewcomer(page, 'E2E Zoomer', TEAM.comet);
   for (let i = 0; i < 5; i++) { await tapFloor(page, 0.3 + i * 0.1, 0.6); await page.waitForTimeout(120); }
   await doubleTap(page, 0.5, 0.55);
   await page.waitForTimeout(400);
@@ -50,7 +50,7 @@ test('mobile: no zoom or scroll', async ({ page }) => {
 });
 
 test('mobile: tap moves my avatar', async ({ page }) => {
-  await joinAsNewcomer(page, 'E2E Walker', 'Mango');
+  await joinAsNewcomer(page, 'E2E Walker', TEAM.mango);
   await page.waitForTimeout(300);
   const before = await myPos(page);
   expect(before).not.toBeNull();
@@ -66,7 +66,7 @@ test('mobile: rapid taps coalesce into one move per second (R27)', async ({ page
   page.on('websocket', (ws) => ws.on('framesent', (f) => {
     if (typeof f.payload === 'string' && f.payload.includes('"type":"move"')) moves.push(Date.now());
   }));
-  await joinAsNewcomer(page, 'E2E Tapper', 'Nova');
+  await joinAsNewcomer(page, 'E2E Tapper', TEAM.nova);
   const t0 = Date.now();
   let lastTapAt = 0;
   for (let i = 0; i < 6; i++) {

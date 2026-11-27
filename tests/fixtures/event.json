@@ -1,0 +1,594 @@
+{
+  "teams": [
+    {
+      "id": "otter",
+      "name": "Otter",
+      "color": "#137A7F",
+      "goesFirst": true
+    },
+    {
+      "id": "pixel",
+      "name": "Pixel",
+      "color": "#6A3FB5"
+    },
+    {
+      "id": "comet",
+      "name": "Comet",
+      "color": "#1F6FB2"
+    },
+    {
+      "id": "mango",
+      "name": "Mango",
+      "color": "#C2570C"
+    },
+    {
+      "id": "koala",
+      "name": "Koala",
+      "color": "#56657A"
+    },
+    {
+      "id": "nova",
+      "name": "Nova",
+      "color": "#B3205F"
+    },
+    {
+      "id": "maple",
+      "name": "Maple",
+      "color": "#B33A2B"
+    }
+  ],
+  "players": [
+    {
+      "id": "p01",
+      "name": "Player 01",
+      "teamId": "otter"
+    },
+    {
+      "id": "p02",
+      "name": "Player 02",
+      "teamId": "otter"
+    },
+    {
+      "id": "p03",
+      "name": "Player 03",
+      "teamId": "otter"
+    },
+    {
+      "id": "p04",
+      "name": "Player 04",
+      "teamId": "otter"
+    },
+    {
+      "id": "p05",
+      "name": "Player 05",
+      "teamId": "otter"
+    },
+    {
+      "id": "p06",
+      "name": "Player 06",
+      "teamId": "pixel"
+    },
+    {
+      "id": "p07",
+      "name": "Player 07",
+      "teamId": "pixel"
+    },
+    {
+      "id": "p08",
+      "name": "Player 08",
+      "teamId": "pixel"
+    },
+    {
+      "id": "p09",
+      "name": "Player 09",
+      "teamId": "pixel"
+    },
+    {
+      "id": "p10",
+      "name": "Player 10",
+      "teamId": "pixel"
+    },
+    {
+      "id": "p11",
+      "name": "Player 11",
+      "teamId": "comet"
+    },
+    {
+      "id": "p12",
+      "name": "Player 12",
+      "teamId": "comet"
+    },
+    {
+      "id": "p13",
+      "name": "Player 13",
+      "teamId": "comet"
+    },
+    {
+      "id": "p14",
+      "name": "Player 14",
+      "teamId": "comet"
+    },
+    {
+      "id": "p15",
+      "name": "Player 15",
+      "teamId": "comet"
+    },
+    {
+      "id": "p16",
+      "name": "Player 16",
+      "teamId": "mango"
+    },
+    {
+      "id": "p17",
+      "name": "Player 17",
+      "teamId": "mango"
+    },
+    {
+      "id": "p18",
+      "name": "Player 18",
+      "teamId": "mango"
+    },
+    {
+      "id": "p19",
+      "name": "Player 19",
+      "teamId": "mango"
+    },
+    {
+      "id": "p20",
+      "name": "Player 20",
+      "teamId": "mango"
+    },
+    {
+      "id": "p21",
+      "name": "Player 21",
+      "teamId": "koala"
+    },
+    {
+      "id": "p22",
+      "name": "Player 22",
+      "teamId": "koala"
+    },
+    {
+      "id": "p23",
+      "name": "Player 23",
+      "teamId": "koala"
+    },
+    {
+      "id": "p24",
+      "name": "Player 24",
+      "teamId": "koala"
+    },
+    {
+      "id": "p25",
+      "name": "Player 25",
+      "teamId": "koala"
+    },
+    {
+      "id": "p26",
+      "name": "Player 26",
+      "teamId": "nova"
+    },
+    {
+      "id": "p27",
+      "name": "Player 27",
+      "teamId": "nova"
+    },
+    {
+      "id": "p28",
+      "name": "Player 28",
+      "teamId": "nova"
+    },
+    {
+      "id": "p29",
+      "name": "Player 29",
+      "teamId": "nova"
+    },
+    {
+      "id": "p30",
+      "name": "Player 30",
+      "teamId": "nova"
+    },
+    {
+      "id": "p31",
+      "name": "Player 31",
+      "teamId": "maple"
+    },
+    {
+      "id": "p32",
+      "name": "Player 32",
+      "teamId": "maple"
+    },
+    {
+      "id": "p33",
+      "name": "Player 33",
+      "teamId": "maple"
+    },
+    {
+      "id": "p34",
+      "name": "Player 34",
+      "teamId": "maple"
+    },
+    {
+      "id": "p35",
+      "name": "Player 35",
+      "teamId": "maple"
+    },
+    {
+      "id": "p36",
+      "name": "Player 36",
+      "teamId": "maple"
+    }
+  ],
+  "icebreakers": [
+    "What is your go-to snack during a busy afternoon?",
+    "What was your first ever job?",
+    "Which city would you love to visit one day?",
+    "What is a small thing that always makes your day better?",
+    "Do you prefer mornings or evenings, and why?",
+    "What is your favourite way to spend a rainy day?",
+    "What is the best meal you have eaten recently?",
+    "Which hobby would you pick up if you had a free month?",
+    "What was your favourite subject at school?",
+    "What is a skill you would love to learn?",
+    "Do you have any pets, or one you wish you had?",
+    "What is your favourite season?",
+    "What is the last show or film you really enjoyed?",
+    "What song do you never skip?",
+    "If you could have any superpower, what would it be?",
+    "What is your favourite local food?",
+    "Tea, coffee or something else?",
+    "What is the best trip you have ever taken?",
+    "What is something you are proud of this year?",
+    "What would your perfect weekend look like?",
+    "Which movie could you watch again and again?",
+    "What is your favourite board game or card game?",
+    "What is a fun fact about you that most people do not know?",
+    "What did you want to be when you grew up?",
+    "Beach holiday or mountain holiday?",
+    "What is your favourite thing about your hometown?",
+    "What is the most useful app on your phone?",
+    "If you could have dinner with anyone, who would it be?",
+    "What is your favourite way to get some exercise?",
+    "What is the best piece of advice you have received?",
+    "What is your favourite dessert?",
+    "Which animal best matches your personality?",
+    "What is a book you would recommend to a friend?",
+    "What is your favourite sport to watch or play?",
+    "Early bird or night owl?",
+    "What is something that always makes you laugh?",
+    "What is the best gift you have ever given or received?",
+    "If you could live anywhere for a year, where would it be?",
+    "What is your favourite thing to cook or bake?",
+    "What is a tradition you enjoy with family or friends?",
+    "What is the most interesting place you have been to?",
+    "What gadget could you not live without?",
+    "Which decade has the best music?",
+    "What would you do with an extra hour every day?",
+    "What is your favourite kind of weather?",
+    "Do you prefer cats, dogs, or neither?",
+    "What is the best thing you have learned from a colleague?",
+    "If you could master any instrument, which one would it be?",
+    "What is your favourite way to relax after work?",
+    "What is a place near the office with a great lunch?",
+    "What is the most adventurous thing you have tried?",
+    "What is your favourite holiday or festival of the year?",
+    "What is a small win you had this week?",
+    "Which fictional world would you like to visit?",
+    "What is your favourite way to travel: plane, train, car or bike?",
+    "What is something you are looking forward to?",
+    "What is your favourite ice cream flavour?",
+    "If you wrote a book, what would it be about?",
+    "What is a talent you have that is not on your CV?",
+    "What is your favourite emoji and why?"
+  ],
+  "riddles": [
+    {
+      "q": "What has to be broken before you can use it?",
+      "answers": [
+        "egg",
+        "an egg"
+      ]
+    },
+    {
+      "q": "What goes up when the rain comes down?",
+      "answers": [
+        "umbrella",
+        "an umbrella",
+        "umbrellas"
+      ]
+    },
+    {
+      "q": "What building has the most stories?",
+      "answers": [
+        "library",
+        "a library"
+      ]
+    },
+    {
+      "q": "What can you catch but not throw?",
+      "answers": [
+        "cold",
+        "a cold",
+        "the flu"
+      ]
+    },
+    {
+      "q": "What has teeth but cannot bite?",
+      "answers": [
+        "comb",
+        "a comb",
+        "zip",
+        "zipper",
+        "saw",
+        "a saw",
+        "gear",
+        "a gear",
+        "cog",
+        "a cog"
+      ]
+    },
+    {
+      "q": "What has an eye but cannot see?",
+      "answers": [
+        "needle",
+        "a needle",
+        "storm",
+        "a storm",
+        "hurricane",
+        "a hurricane",
+        "potato",
+        "a potato"
+      ]
+    },
+    {
+      "q": "What gets bigger the more you take away from it?",
+      "answers": [
+        "hole",
+        "a hole"
+      ]
+    },
+    {
+      "q": "What has one head, one foot and four legs?",
+      "answers": [
+        "bed",
+        "a bed"
+      ]
+    },
+    {
+      "q": "What runs but never walks?",
+      "answers": [
+        "river",
+        "a river",
+        "water",
+        "tap",
+        "a tap"
+      ]
+    },
+    {
+      "q": "What can travel around the world while staying in a corner?",
+      "answers": [
+        "stamp",
+        "a stamp"
+      ]
+    },
+    {
+      "q": "I am light as a feather, yet the strongest person cannot hold me for more than a few minutes. What am I?",
+      "answers": [
+        "breath",
+        "your breath",
+        "a breath"
+      ]
+    },
+    {
+      "q": "Which month has 28 days?",
+      "answers": [
+        "all",
+        "all of them",
+        "every month",
+        "all months",
+        "each month"
+      ]
+    },
+    {
+      "q": "What has words but never speaks?",
+      "answers": [
+        "book",
+        "a book",
+        "books",
+        "newspaper",
+        "a newspaper",
+        "dictionary",
+        "a dictionary"
+      ]
+    },
+    {
+      "q": "What comes once in a minute, twice in a moment, but never in a thousand years?",
+      "answers": [
+        "m",
+        "the letter m",
+        "letter m"
+      ]
+    },
+    {
+      "q": "What is full of holes but still holds water?",
+      "answers": [
+        "sponge",
+        "a sponge"
+      ]
+    }
+  ],
+  "quiz": [
+    {
+      "q": "Which is the largest planet in our solar system?",
+      "choices": [
+        "Mars",
+        "Jupiter",
+        "Venus",
+        "Saturn"
+      ],
+      "correct": 1
+    },
+    {
+      "q": "How many continents are there?",
+      "choices": [
+        "5",
+        "6",
+        "7",
+        "8"
+      ],
+      "correct": 2
+    },
+    {
+      "q": "Which animal is the tallest in the world?",
+      "choices": [
+        "Elephant",
+        "Giraffe",
+        "Ostrich",
+        "Horse"
+      ],
+      "correct": 1
+    },
+    {
+      "q": "What colour do you get by mixing blue and yellow?",
+      "choices": [
+        "Green",
+        "Purple",
+        "Orange",
+        "Brown"
+      ],
+      "correct": 0
+    },
+    {
+      "q": "What is the capital city of Japan?",
+      "choices": [
+        "Kyoto",
+        "Osaka",
+        "Tokyo",
+        "Seoul"
+      ],
+      "correct": 2
+    },
+    {
+      "q": "How many legs does a spider have?",
+      "choices": [
+        "6",
+        "8",
+        "10",
+        "12"
+      ],
+      "correct": 1
+    },
+    {
+      "q": "Which is the largest ocean on Earth?",
+      "choices": [
+        "Atlantic",
+        "Indian",
+        "Arctic",
+        "Pacific"
+      ],
+      "correct": 3
+    },
+    {
+      "q": "Which gas do plants take in from the air?",
+      "choices": [
+        "Oxygen",
+        "Carbon dioxide",
+        "Helium",
+        "Nitrogen"
+      ],
+      "correct": 1
+    },
+    {
+      "q": "Which is the fastest land animal?",
+      "choices": [
+        "Cheetah",
+        "Lion",
+        "Horse",
+        "Greyhound"
+      ],
+      "correct": 0
+    },
+    {
+      "q": "How many sides does a hexagon have?",
+      "choices": [
+        "5",
+        "6",
+        "7",
+        "8"
+      ],
+      "correct": 1
+    },
+    {
+      "q": "Which fruit is the main ingredient in guacamole?",
+      "choices": [
+        "Banana",
+        "Mango",
+        "Avocado",
+        "Lime"
+      ],
+      "correct": 2
+    },
+    {
+      "q": "What is the hardest natural material on Earth?",
+      "choices": [
+        "Gold",
+        "Iron",
+        "Quartz",
+        "Diamond"
+      ],
+      "correct": 3
+    }
+  ],
+  "boss": {
+    "intro": "The lobby doors have locked! Solve each clue to find the next one. Every answer is the key to the clue that follows.",
+    "steps": [
+      {
+        "q": "Clue 1, on the front desk: I have keys but open no doors. I have a space bar but no room. What am I?",
+        "answers": [
+          "keyboard",
+          "a keyboard",
+          "computer keyboard",
+          "computer",
+          "a computer",
+          "laptop",
+          "a laptop"
+        ]
+      },
+      {
+        "q": "Clue 2, typed on the screen: \"Look up! On the wall behind the keyboard hangs something with hands but no arms, and it never claps. What is it?\"",
+        "answers": [
+          "clock",
+          "a clock",
+          "watch",
+          "wall clock"
+        ]
+      },
+      {
+        "q": "Clue 3, taped to the back of the clock: \"After a swim I hang nearby. What gets wetter the more it dries?\"",
+        "answers": [
+          "towel",
+          "a towel",
+          "towels"
+        ]
+      },
+      {
+        "q": "Clue 4, pinned to the towel: \"The power is out, so light me up! I am tall when I am young and short when I am old. What am I?\"",
+        "answers": [
+          "candle",
+          "a candle",
+          "candles"
+        ]
+      },
+      {
+        "q": "Final clue, written in wax by the candle light: \"The more of me you take, the more of me you leave behind. Follow me to the exit!\"",
+        "answers": [
+          "footsteps",
+          "steps",
+          "footprints",
+          "footstep",
+          "footprint"
+        ]
+      }
+    ]
+  }
+}

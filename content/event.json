@@ -2,45 +2,51 @@
   "teams": [
     {
       "id": "otter",
-      "name": "Otter",
+      "name": "Team 1",
       "color": "#137A7F",
       "goesFirst": true
     },
     {
       "id": "pixel",
-      "name": "Pixel",
-      "color": "#6A3FB5"
+      "name": "Team 2",
+      "color": "#6A3FB5",
+      "goesFirst": false
     },
     {
       "id": "comet",
-      "name": "Comet",
-      "color": "#1F6FB2"
+      "name": "Team 3",
+      "color": "#1F6FB2",
+      "goesFirst": false
     },
     {
       "id": "mango",
-      "name": "Mango",
-      "color": "#C2570C"
+      "name": "Team 4",
+      "color": "#C2570C",
+      "goesFirst": false
     },
     {
       "id": "koala",
-      "name": "Koala",
-      "color": "#56657A"
+      "name": "Team 5",
+      "color": "#56657A",
+      "goesFirst": false
     },
     {
       "id": "nova",
-      "name": "Nova",
-      "color": "#B3205F"
+      "name": "Team 6",
+      "color": "#B3205F",
+      "goesFirst": false
     },
     {
       "id": "maple",
-      "name": "Maple",
-      "color": "#B33A2B"
+      "name": "Team 7",
+      "color": "#B33A2B",
+      "goesFirst": false
     }
   ],
   "players": [
     {
       "id": "p01",
-      "name": "Ray",
+      "name": "Ciara",
       "teamId": "otter"
     },
     {
@@ -50,172 +56,172 @@
     },
     {
       "id": "p03",
-      "name": "Waihong",
+      "name": "Tony",
       "teamId": "otter"
     },
     {
       "id": "p04",
-      "name": "Yu Xuan",
+      "name": "Player 1",
       "teamId": "otter"
     },
     {
       "id": "p05",
-      "name": "Chiao Hao",
+      "name": "Yu Xuan",
       "teamId": "otter"
     },
     {
       "id": "p06",
-      "name": "Weixuan",
+      "name": "Chiao Hao",
       "teamId": "pixel"
     },
     {
       "id": "p07",
-      "name": "Aaron",
+      "name": "Player 2",
       "teamId": "pixel"
     },
     {
       "id": "p08",
-      "name": "Weijie",
+      "name": "Edwin",
       "teamId": "pixel"
     },
     {
       "id": "p09",
-      "name": "Keming",
+      "name": "Weixuan",
       "teamId": "pixel"
     },
     {
       "id": "p10",
-      "name": "Jordan",
+      "name": "Anliang",
       "teamId": "pixel"
     },
     {
       "id": "p11",
-      "name": "Joanna",
+      "name": "Peiqi",
       "teamId": "comet"
     },
     {
       "id": "p12",
-      "name": "Ciara",
+      "name": "Melda",
       "teamId": "comet"
     },
     {
       "id": "p13",
-      "name": "Tommi",
+      "name": "Hou Ren",
       "teamId": "comet"
     },
     {
       "id": "p14",
-      "name": "Koozy",
+      "name": "Player 3",
       "teamId": "comet"
     },
     {
       "id": "p15",
-      "name": "Hari",
+      "name": "Koozy",
       "teamId": "comet"
     },
     {
       "id": "p16",
-      "name": "Chuan Kai",
+      "name": "Keming",
       "teamId": "mango"
     },
     {
       "id": "p17",
-      "name": "Anliang",
+      "name": "Hansing",
       "teamId": "mango"
     },
     {
       "id": "p18",
-      "name": "Linjuan",
+      "name": "Deepu",
       "teamId": "mango"
     },
     {
       "id": "p19",
-      "name": "Kah Chee",
+      "name": "Hweehoon",
       "teamId": "mango"
     },
     {
       "id": "p20",
-      "name": "Edwin",
+      "name": "Hari",
       "teamId": "mango"
     },
     {
       "id": "p21",
-      "name": "Hansing",
+      "name": "Joanna",
       "teamId": "koala"
     },
     {
       "id": "p22",
-      "name": "Josephine",
-      "teamId": "koala"
-    },
-    {
-      "id": "p23",
       "name": "Adrian",
       "teamId": "koala"
     },
     {
+      "id": "p23",
+      "name": "Linjuan",
+      "teamId": "koala"
+    },
+    {
       "id": "p24",
-      "name": "Hou Ren",
+      "name": "Jordan",
       "teamId": "koala"
     },
     {
       "id": "p25",
-      "name": "Adi",
+      "name": "Player 4",
       "teamId": "koala"
     },
     {
       "id": "p26",
-      "name": "Tony",
+      "name": "Adi",
       "teamId": "nova"
     },
     {
       "id": "p27",
-      "name": "Deepu",
+      "name": "Aaron",
       "teamId": "nova"
     },
     {
       "id": "p28",
-      "name": "Peiqi",
+      "name": "Player 5",
       "teamId": "nova"
     },
     {
       "id": "p29",
-      "name": "Hweehoon",
+      "name": "Ray",
       "teamId": "nova"
     },
     {
       "id": "p30",
-      "name": "Melda",
+      "name": "Waihong",
       "teamId": "nova"
     },
     {
       "id": "p31",
-      "name": "Player 31",
+      "name": "Weijie",
       "teamId": "maple"
     },
     {
       "id": "p32",
-      "name": "Player 32",
+      "name": "Kah Chee",
       "teamId": "maple"
     },
     {
       "id": "p33",
-      "name": "Player 33",
+      "name": "Josephine",
       "teamId": "maple"
     },
     {
       "id": "p34",
-      "name": "Player 34",
+      "name": "Tommi",
       "teamId": "maple"
     },
     {
       "id": "p35",
-      "name": "Player 35",
+      "name": "Player 6",
       "teamId": "maple"
     },
     {
       "id": "p36",
-      "name": "Player 36",
+      "name": "Chuan Kai",
       "teamId": "maple"
     }
   ],

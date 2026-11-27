@@ -1,7 +1,20 @@
 // Shared e2e helpers: a Node-side host socket (Node 22+ global WebSocket) to reset the shared room,
 // and the player join flow.
 import { expect, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import type { HostAction, ServerMsg } from '../../src/shared/protocol';
+import type { Content } from '../../src/shared/types';
+import { teamLabel } from '../../src/shared/teamLabel';
+
+/**
+ * e2e runs against the dev server, which serves the real content/event.json, so names are read
+ * from that file rather than hard-coded. Team ids (otter, pixel, …) are stable; names are not.
+ */
+const content = JSON.parse(readFileSync(new URL('../../content/event.json', import.meta.url), 'utf8')) as Content;
+export const TEAM: Record<string, string> = Object.fromEntries(content.teams.map((t) => [t.id, t.name]));
+/** How the host console writes a team in capitals, e.g. "TEAM OTTER" or "TEAM 1". */
+export const TEAM_UP = (id: string): string => teamLabel(TEAM[id]!).toUpperCase();
+export const playerName = (id: string): string => content.players.find((p) => p.id === id)!.name;
 
 type HostState = Extract<ServerMsg, { type: 'hostState' }>;
 export const PIN = process.env.HOST_PIN ?? '1234';
@@ -54,7 +67,7 @@ export async function resetRoom(baseURL: string): Promise<void> {
 }
 
 /** Picker → "I'm not on the list" → name + team → avatar builder → room canvas. */
-export async function joinAsNewcomer(page: Page, name: string, team = 'Pixel'): Promise<void> {
+export async function joinAsNewcomer(page: Page, name: string, team = TEAM.pixel!): Promise<void> {
   await page.goto('/');
   await page.getByRole('button', { name: "I'm not on the list" }).click();
   await page.getByRole('textbox', { name: 'Your name' }).fill(name);
