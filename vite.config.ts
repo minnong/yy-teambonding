@@ -3,7 +3,7 @@ import { cloudflare } from '@cloudflare/vite-plugin';
 import { resolve } from 'node:path';
 
 // Root is src/client so index.html is served at / and host.html at /host.html.
-// /host is served from host.html by the assets html_handling (wrangler.jsonc), not by Worker code.
+// /host is served from host.html by the assets default html_handling (auto-trailing-slash), not by Worker code.
 export default defineConfig({
   root: 'src/client',
   publicDir: resolve(import.meta.dirname, 'public'),
